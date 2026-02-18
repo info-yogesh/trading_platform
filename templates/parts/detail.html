@@ -1,0 +1,38 @@
+{% extends "base/base.html" %}
+{% block title %}{{ part.part_number }} — TradePlatform{% endblock %}
+{% block nav_parts %}active{% endblock %}
+{% block page_title %}{{ part.part_number }}{% endblock %}
+{% block topbar_actions %}
+<a href="/parts/{{ part.pk }}/edit/" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header"><h2>Part Details</h2></div>
+    <div class="card-body">
+        <div class="detail-grid">
+            <div>
+                <div class="detail-row"><span class="label">Part Number</span><span class="value" style="font-family:monospace;font-weight:600;">{{ part.part_number }}</span></div>
+                <div class="detail-row"><span class="label">Manufacturer</span><span class="value">{{ part.manufacturer|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">Mfr Code</span><span class="value">{{ part.manufacturer_code|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">Description</span><span class="value">{{ part.description|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">UOM</span><span class="value">{{ part.uom }}</span></div>
+                <div class="detail-row"><span class="label">Condition</span><span class="value">{{ part.condition|default:"—" }}</span></div>
+            </div>
+            <div>
+                <div class="detail-row"><span class="label">Status</span><span class="value"><span class="badge badge-{{ part.status }}">{{ part.status }}</span></span></div>
+                <div class="detail-row"><span class="label">Hazardous</span><span class="value">{% if part.is_hazardous %}<span class="badge badge-warning">Yes</span>{% else %}No{% endif %}</span></div>
+                <div class="detail-row"><span class="label">Alternate PN</span><span class="value">{{ part.alternate_pn|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">Superseded PN</span><span class="value">{{ part.superseded_pn|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">Tags</span><span class="value">{{ part.tags|default:"—" }}</span></div>
+                <div class="detail-row"><span class="label">Created</span><span class="value">{{ part.created_at|date:"d M Y" }}</span></div>
+            </div>
+        </div>
+        {% if part.internal_notes %}
+        <div style="margin-top:16px;padding:12px;background:#f8fafc;border-radius:6px;">
+            <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Internal Notes</div>
+            <div>{{ part.internal_notes }}</div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

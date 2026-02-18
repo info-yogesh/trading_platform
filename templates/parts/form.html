@@ -1,0 +1,83 @@
+{% extends "base/base.html" %}
+{% block title %}{{ action }} Part — TradePlatform{% endblock %}
+{% block nav_parts %}active{% endblock %}
+{% block page_title %}{{ action }} Part{% endblock %}
+{% block content %}
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div class="card">
+        <div class="card-header"><h2>Part Details</h2></div>
+        <div class="card-body">
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label>Part Number *</label>
+                    <input type="text" name="part_number" class="form-control" value="{% if part %}{{ part.part_number }}{% endif %}" {% if part %}readonly{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>UOM</label>
+                    <input type="text" name="uom" class="form-control" value="{% if part %}{{ part.uom }}{% else %}EA{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label>Manufacturer</label>
+                    <input type="text" name="manufacturer" class="form-control" value="{% if part %}{{ part.manufacturer }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label>Manufacturer Code</label>
+                    <input type="text" name="manufacturer_code" class="form-control" value="{% if part %}{{ part.manufacturer_code }}{% endif %}">
+                </div>
+                <div class="form-group" style="grid-column:span 2;">
+                    <label>Description</label>
+                    <textarea name="description" class="form-control">{% if part %}{{ part.description }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Condition</label>
+                    <select name="condition" class="form-control">
+                        <option value="">— Any —</option>
+                        <option value="new" {% if part and part.condition == 'new' %}selected{% endif %}>New</option>
+                        <option value="used" {% if part and part.condition == 'used' %}selected{% endif %}>Used</option>
+                        <option value="refurbished" {% if part and part.condition == 'refurbished' %}selected{% endif %}>Refurbished</option>
+                        <option value="as_is" {% if part and part.condition == 'as_is' %}selected{% endif %}>As-Is</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select name="status" class="form-control">
+                        <option value="active" {% if not part or part.status == 'active' %}selected{% endif %}>Active</option>
+                        <option value="archived" {% if part and part.status == 'archived' %}selected{% endif %}>Archived</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Alternate Part Number</label>
+                    <input type="text" name="alternate_pn" class="form-control" value="{% if part %}{{ part.alternate_pn }}{% endif %}">
+                </div>
+                <div class="form-group">
+                    <label>Superseded Part Number</label>
+                    <input type="text" name="superseded_pn" class="form-control" value="{% if part %}{{ part.superseded_pn }}{% endif %}">
+                </div>
+                <div class="form-group" style="grid-column:span 2;">
+                    <label>Tags (comma-separated)</label>
+                    <input type="text" name="tags" class="form-control" value="{% if part %}{{ part.tags }}{% endif %}" placeholder="electronics, passive, RoHS">
+                </div>
+                <div class="form-group" style="grid-column:span 2;">
+                    <label>Internal Notes</label>
+                    <textarea name="internal_notes" class="form-control">{% if part %}{{ part.internal_notes }}{% endif %}</textarea>
+                </div>
+                <div class="form-group">
+                    <label style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" name="is_hazardous" {% if part and part.is_hazardous %}checked{% endif %}> Hazardous Material
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="card" style="position:sticky;top:70px;">
+        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Part</button>
+            <a href="/parts/" class="btn btn-secondary">Cancel</a>
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}

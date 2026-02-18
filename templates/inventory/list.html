@@ -1,0 +1,99 @@
+{% extends "base/base.html" %}
+{% block title %}Inventory — TradePlatform{% endblock %}
+{% block nav_inventory %}active{% endblock %}
+{% block page_title %}Inventory{% endblock %}
+
+{% block topbar_actions %}
+<a href="/inventory/create/" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Add Item</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Inventory ({{ page.paginator.count }} items)</h2>
+        <form method="get" class="filters">
+            <div class="search-input">
+                <i class="fas fa-search"></i>
+                <input type="text" name="q" value="{{ q }}" class="form-control" style="width:220px;" placeholder="Search part #, description...">
+            </div>
+            <select name="type" class="form-control" style="width:160px;">
+                <option value="">All Types</option>
+                {% for val, label in type_choices %}
+                <option value="{{ val }}" {% if inv_type == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Filter</button>
+            {% if q or inv_type %}<a href="/inventory/" class="btn btn-secondary">Clear</a>{% endif %}
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Part #</th>
+                    <th>Description</th>
+                    <th>Type</th>
+                    <th>Qty Total</th>
+                    <th>Qty Available</th>
+                    <th>Cost</th>
+                    <th>Condition</th>
+                    <th>Location</th>
+                    <th>Vendor</th>
+                    <th>Expiry</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in page %}
+                <tr>
+                    <td style="font-weight:600;font-family:monospace;">
+                        <a href="/inventory/{{ item.pk }}/" style="color:#3b82f6;text-decoration:none;">{{ item.part.part_number }}</a>
+                    </td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ item.description|default:item.part.description|default:"—" }}</td>
+                    <td>
+                        <span class="badge {% if item.item_type == 'own_stock' %}badge-approved{% elif item.item_type == 'vendor_offer' %}badge-sent{% else %}badge-closed{% endif %}">
+                            {{ item.get_item_type_display }}
+                        </span>
+                    </td>
+                    <td style="font-weight:600;">{{ item.quantity }}</td>
+                    <td>
+                        <span style="{% if item.quantity_available < item.quantity %}color:#f59e0b;{% else %}color:#10b981;{% endif %}font-weight:600;">
+                            {{ item.quantity_available }}
+                        </span>
+                    </td>
+                    <td>{% if item.cost %}${{ item.cost|floatformat:4 }} {{ item.currency }}{% else %}<span style="color:#94a3b8;">—</span>{% endif %}</td>
+                    <td>{{ item.condition|default:"—" }}</td>
+                    <td>{{ item.location|default:"—" }}</td>
+                    <td>{{ item.vendor.name|default:"—" }}</td>
+                    <td>
+                        {% if item.expiration_date %}
+                            <span {% if item.expiration_date < today %}style="color:#ef4444;font-weight:600;"{% endif %}>
+                                {{ item.expiration_date }}
+                            </span>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <a href="/inventory/{{ item.pk }}/" class="btn btn-sm btn-secondary">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11" style="text-align:center;padding:32px;color:#64748b;">
+                        No inventory items found. <a href="/inventory/create/" style="color:#3b82f6;">Add first item →</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page.has_other_pages %}
+    <div style="padding:12px 20px;border-top:1px solid #e2e8f0;">
+        <div class="pagination">
+            {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}&type={{ inv_type }}">‹ Prev</a>{% endif %}
+            <span class="current">Page {{ page.number }} of {{ page.paginator.num_pages }}</span>
+            {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}&type={{ inv_type }}">Next ›</a>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,279 @@
+{% extends "base/base.html" %}
+{% block title %}{{ action }} Purchase Order — TradePlatform{% endblock %}
+{% block nav_po %}active{% endblock %}
+{% block page_title %}{{ action }} Purchase Order{% endblock %}
+
+{% block content %}
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- PO Header -->
+        <div class="card">
+            <div class="card-header">
+                <h2>PO Header</h2>
+                {% if so %}<a href="/sales-orders/{{ so.pk }}/" style="font-size:12px;color:#3b82f6;text-decoration:none;">From SO: {{ so.so_number }}</a>{% endif %}
+            </div>
+            <div class="card-body">
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label>Vendor *</label>
+                        <select name="vendor" class="form-control" required>
+                            <option value="">Select Vendor</option>
+                            {% for v in vendors %}
+                            <option value="{{ v.pk }}" {% if po and po.vendor_id == v.pk %}selected{% endif %}>{{ v.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select name="currency" class="form-control">
+                            <option value="USD" {% if not po or po.currency == 'USD' %}selected{% endif %}>USD</option>
+                            <option value="EUR" {% if po and po.currency == 'EUR' %}selected{% endif %}>EUR</option>
+                            <option value="GBP" {% if po and po.currency == 'GBP' %}selected{% endif %}>GBP</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Terms</label>
+                        <input type="text" name="payment_terms" class="form-control"
+                               value="{% if po %}{{ po.payment_terms }}{% endif %}" placeholder="e.g. Net 30, T/T">
+                    </div>
+                    <div class="form-group">
+                        <label>Delivery Terms</label>
+                        <input type="text" name="delivery_terms" class="form-control"
+                               value="{% if po %}{{ po.delivery_terms }}{% endif %}" placeholder="e.g. EXW, DDP">
+                    </div>
+                    <div class="form-group">
+                        <label>Expected Delivery Date</label>
+                        <input type="date" name="expected_delivery" class="form-control"
+                               value="{% if po and po.expected_delivery %}{{ po.expected_delivery|date:'Y-m-d' }}{% endif %}">
+                    </div>
+                    {% if po %}
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select name="status" class="form-control">
+                            {% for val, label in po.STATUS_CHOICES %}
+                            <option value="{{ val }}" {% if po.status == val %}selected{% endif %}>{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label>Notes</label>
+                        <textarea name="notes" class="form-control">{% if po %}{{ po.notes }}{% endif %}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PO Lines -->
+        <div class="card">
+            <div class="card-header">
+                <h2>PO Lines</h2>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addLine()">
+                    <i class="fas fa-plus"></i> Add Line
+                </button>
+            </div>
+            <div class="table-wrapper">
+                <table class="line-table">
+                    <thead>
+                        <tr>
+                            <th style="width:30px;">#</th>
+                            <th style="min-width:130px;">Part #</th>
+                            <th style="min-width:180px;">Description</th>
+                            <th style="width:80px;">Qty</th>
+                            <th style="width:100px;">CD</th>
+                            <th style="width:110px;">Unit Cost</th>
+                            <th style="width:110px;">Line Total</th>
+                            <th style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="linesBody">
+                        {% if so %}
+                            {% for line in so.lines.all %}
+                            <tr>
+                                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                                <td><input type="text" name="line_pn[]" value="{{ line.part_number_raw }}"></td>
+                                <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
+                                <td><input type="number" name="line_qty[]" value="{{ line.quantity_ordered }}" step="0.0001" min="0" class="qty" onchange="calcLine(this)"></td>
+                                <td><input type="text" name="line_cd[]" value="{{ line.condition }}"></td>
+                                <td><input type="number" name="line_cost[]" step="0.0001" min="0" class="cost" onchange="calcLine(this)" placeholder="0.00"></td>
+                                <td class="line-total" style="font-weight:600;">—</td>
+                                <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr>
+                                <td style="color:#94a3b8;font-size:12px;">1</td>
+                                <td><input type="text" name="line_pn[]" placeholder="Part #"></td>
+                                <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+                                <td><input type="number" name="line_qty[]" step="0.0001" min="0" class="qty" onchange="calcLine(this)" placeholder="0"></td>
+                                <td><input type="text" name="line_cd[]" placeholder="New / Used..."></td>
+                                <td><input type="number" name="line_cost[]" step="0.0001" min="0" class="cost" onchange="calcLine(this)" placeholder="0.00"></td>
+                                <td class="line-total">—</td>
+                                <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                            </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Additional Charges -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Additional Charges</h2>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:11px;color:#64748b;">Transport, customs, handling — automatically included in profit calculations</span>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="addCharge()">
+                        <i class="fas fa-plus"></i> Add Charge
+                    </button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table class="line-table">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Allocation</th>
+                            <th style="width:40px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="chargesBody">
+                        <tr id="noChargesRow">
+                            <td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">
+                                <i class="fas fa-info-circle"></i> No additional charges added. Click "Add Charge" to add transport, customs, or handling fees.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:70px;">
+        <div class="card">
+            <div class="card-header"><h2>Actions</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Save Purchase Order
+                </button>
+                <a href="/purchase-orders/" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+
+        <!-- Live Totals -->
+        <div class="card">
+            <div class="card-header"><h2>Order Summary</h2></div>
+            <div class="card-body">
+                <div class="detail-row">
+                    <span class="label">Lines Subtotal</span>
+                    <span class="value" id="linesSubtotal" style="font-weight:600;">$0.00</span>
+                </div>
+                <div class="detail-row">
+                    <span class="label">Additional Charges</span>
+                    <span class="value" id="chargesTotal" style="font-weight:600;">$0.00</span>
+                </div>
+                <div style="padding:10px 0 0;border-top:2px solid #e2e8f0;margin-top:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-size:13px;font-weight:600;color:#64748b;">PO TOTAL</span>
+                        <span id="poTotal" style="font-size:22px;font-weight:800;color:#1a2744;">$0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let lineCount = document.querySelectorAll('#linesBody tr').length;
+
+function addLine() {
+    lineCount++;
+    const tbody = document.getElementById('linesBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td style="color:#94a3b8;font-size:12px;">${lineCount}</td>
+        <td><input type="text" name="line_pn[]" placeholder="Part #"></td>
+        <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+        <td><input type="number" name="line_qty[]" step="0.0001" min="0" class="qty" onchange="calcLine(this)" placeholder="0"></td>
+        <td><input type="text" name="line_cd[]" placeholder="New/Used..."></td>
+        <td><input type="number" name="line_cost[]" step="0.0001" min="0" class="cost" onchange="calcLine(this)" placeholder="0.00"></td>
+        <td class="line-total">—</td>
+        <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function addCharge() {
+    const noRow = document.getElementById('noChargesRow');
+    if (noRow) noRow.remove();
+    const tbody = document.getElementById('chargesBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>
+            <select name="charge_type[]" style="border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;font-size:13px;background:white;">
+                <option value="transport">Transport</option>
+                <option value="customs">Customs</option>
+                <option value="handling">Handling</option>
+                <option value="other">Other</option>
+            </select>
+        </td>
+        <td><input type="text" name="charge_desc[]" placeholder="e.g. Air freight Dubai→London"
+            style="border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;font-size:13px;width:100%;"></td>
+        <td><input type="number" name="charge_amount[]" step="0.01" min="0" placeholder="0.00"
+            style="border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;font-size:13px;width:100px;" onchange="updateTotals()"></td>
+        <td>
+            <select name="charge_allocation[]" style="border:1px solid #e2e8f0;border-radius:4px;padding:5px 8px;font-size:13px;background:white;">
+                <option value="entire_po">Entire PO</option>
+                <option value="line">Specific Line</option>
+            </select>
+        </td>
+        <td><span class="del-row" onclick="this.closest('tr').remove(); updateTotals();">
+            <i class="fas fa-times"></i></span></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function delRow(el) {
+    if (document.querySelectorAll('#linesBody tr').length > 1) {
+        el.closest('tr').remove();
+        updateTotals();
+    }
+}
+
+function calcLine(el) {
+    const row = el.closest('tr');
+    const qty = parseFloat(row.querySelector('.qty')?.value) || 0;
+    const cost = parseFloat(row.querySelector('.cost')?.value) || 0;
+    const total = qty * cost;
+    const ltCell = row.querySelector('.line-total');
+    if (ltCell) ltCell.textContent = total > 0 ? '$' + total.toFixed(2) : '—';
+    updateTotals();
+}
+
+function updateTotals() {
+    let linesSub = 0;
+    document.querySelectorAll('#linesBody .line-total').forEach(td => {
+        const v = parseFloat(td.textContent.replace('$', '')) || 0;
+        linesSub += v;
+    });
+
+    let chargesTotal = 0;
+    document.querySelectorAll('[name="charge_amount[]"]').forEach(inp => {
+        chargesTotal += parseFloat(inp.value) || 0;
+    });
+
+    document.getElementById('linesSubtotal').textContent = '$' + linesSub.toFixed(2);
+    document.getElementById('chargesTotal').textContent = '$' + chargesTotal.toFixed(2);
+    document.getElementById('poTotal').textContent = '$' + (linesSub + chargesTotal).toFixed(2);
+}
+</script>
+{% endblock %}

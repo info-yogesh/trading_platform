@@ -1,0 +1,190 @@
+{% extends "base/base.html" %}
+{% block title %}{{ po.po_number }} — TradePlatform{% endblock %}
+{% block nav_po %}active{% endblock %}
+{% block page_title %}{{ po.po_number }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/purchase-orders/{{ po.pk }}/edit/" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+<a href="/receiving/po/{{ po.pk }}/receive/" class="btn btn-primary btn-sm"><i class="fas fa-box-open"></i> Receive Goods</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- PO Header -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Purchase Order Details</h2>
+                <span class="badge badge-{{ po.status }}">{{ po.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">PO Number</span><span class="value" style="font-weight:700;">{{ po.po_number }}</span></div>
+                        <div class="detail-row"><span class="label">Vendor</span><span class="value"><a href="/companies/{{ po.vendor_id }}/" style="color:#3b82f6;text-decoration:none;">{{ po.vendor.name }}</a></span></div>
+                        <div class="detail-row"><span class="label">Linked SO</span><span class="value">
+                            {% if po.sales_order %}<a href="/sales-orders/{{ po.sales_order_id }}/" style="color:#3b82f6;text-decoration:none;">{{ po.sales_order.so_number }}</a>
+                            {% else %}—{% endif %}
+                        </span></div>
+                        <div class="detail-row"><span class="label">Currency</span><span class="value">{{ po.currency }}</span></div>
+                        <div class="detail-row"><span class="label">Payment Terms</span><span class="value">{{ po.payment_terms|default:"—" }}</span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Total Cost</span><span class="value" style="font-size:18px;font-weight:700;color:#1a2744;">${{ po.total_cost|floatformat:2 }}</span></div>
+                        <div class="detail-row"><span class="label">Expected Delivery</span><span class="value">{{ po.expected_delivery|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Created By</span><span class="value">{{ po.created_by }}</span></div>
+                        <div class="detail-row"><span class="label">Created At</span><span class="value">{{ po.created_at|date:"d M Y H:i" }}</span></div>
+                        <div class="detail-row"><span class="label">GRNs Issued</span><span class="value">{{ grns.count }}</span></div>
+                    </div>
+                </div>
+                {% if po.notes %}
+                <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;font-size:13px;">
+                    <strong>Notes:</strong> {{ po.notes }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- PO Lines -->
+        <div class="card">
+            <div class="card-header"><h2>PO Lines</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Part #</th>
+                            <th>Description</th>
+                            <th>Qty Ordered</th>
+                            <th>Qty Received</th>
+                            <th>Unit Cost</th>
+                            <th>Line Total</th>
+                            <th>Progress</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                        <tr>
+                            <td style="color:#94a3b8;">{{ line.line_number }}</td>
+                            <td style="font-weight:600;font-family:monospace;">{{ line.part_number_raw }}</td>
+                            <td>{{ line.description|default:"—" }}</td>
+                            <td>{{ line.quantity }}</td>
+                            <td>{{ line.quantity_received }}</td>
+                            <td>${{ line.cost|floatformat:4 }}</td>
+                            <td style="font-weight:600;">${{ line.line_total|floatformat:2 }}</td>
+                            <td>
+                                {% if line.quantity > 0 %}
+                                {% widthratio line.quantity_received line.quantity 100 as pct %}
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <div style="flex:1;height:6px;background:#e2e8f0;border-radius:3px;">
+                                        <div style="width:{{ pct }}%;height:100%;background:{% if pct == '100' %}#10b981{% else %}#3b82f6{% endif %};border-radius:3px;"></div>
+                                    </div>
+                                    <span style="font-size:11px;color:#64748b;white-space:nowrap;">{{ pct }}%</span>
+                                </div>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">No lines</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Additional Charges -->
+        {% if charges %}
+        <div class="card">
+            <div class="card-header"><h2>Additional Charges</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr><th>Type</th><th>Description</th><th>Amount</th><th>Allocation</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for charge in charges %}
+                        <tr>
+                            <td><span class="badge badge-warning">{{ charge.get_charge_type_display }}</span></td>
+                            <td>{{ charge.description }}</td>
+                            <td style="font-weight:600;">${{ charge.amount|floatformat:2 }}</td>
+                            <td>{{ charge.get_allocation_display }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- GRNs -->
+        {% if grns %}
+        <div class="card">
+            <div class="card-header"><h2>Goods Receipt Notes</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>GRN #</th><th>Date</th><th>Received By</th><th>QC Passed</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for grn in grns %}
+                        <tr>
+                            <td style="font-weight:600;color:#3b82f6;">{{ grn.grn_number }}</td>
+                            <td>{{ grn.received_date }}</td>
+                            <td>{{ grn.received_by }}</td>
+                            <td>{% if grn.quality_check_passed %}<span class="badge badge-approved">Yes</span>{% else %}<span class="badge badge-danger">No</span>{% endif %}</td>
+                            <td><span class="badge badge-{{ grn.status }}">{{ grn.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:70px;">
+        <div class="card">
+            <div class="card-header"><h2>Actions</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+                <a href="/receiving/po/{{ po.pk }}/receive/" class="btn btn-primary">
+                    <i class="fas fa-box-open"></i> Receive Goods
+                </a>
+                <a href="/purchase-orders/{{ po.pk }}/edit/" class="btn btn-secondary">
+                    <i class="fas fa-edit"></i> Edit PO
+                </a>
+                <button class="btn btn-secondary" onclick="window.print()">
+                    <i class="fas fa-print"></i> Print PO
+                </button>
+            </div>
+        </div>
+
+        <!-- Cost Summary -->
+        <div class="card">
+            <div class="card-header"><h2>Cost Summary</h2></div>
+            <div class="card-body">
+                {% for line in lines %}
+                <div class="detail-row">
+                    <span class="label" style="font-family:monospace;font-size:12px;">{{ line.part_number_raw }}</span>
+                    <span class="value">${{ line.line_total|floatformat:2 }}</span>
+                </div>
+                {% endfor %}
+                {% if charges %}
+                <div style="border-top:1px dashed #e2e8f0;margin:8px 0;"></div>
+                {% for charge in charges %}
+                <div class="detail-row">
+                    <span class="label" style="color:#f59e0b;">{{ charge.get_charge_type_display }}</span>
+                    <span class="value">${{ charge.amount|floatformat:2 }}</span>
+                </div>
+                {% endfor %}
+                {% endif %}
+                <div style="border-top:2px solid #e2e8f0;margin-top:8px;padding-top:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <span style="font-weight:700;font-size:13px;">TOTAL</span>
+                        <span style="font-size:20px;font-weight:800;color:#1a2744;">${{ po.total_cost|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

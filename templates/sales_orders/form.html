@@ -1,0 +1,131 @@
+{% extends "base/base.html" %}
+{% block title %}{{ action }} Sales Order — TradePlatform{% endblock %}
+{% block nav_so %}active{% endblock %}
+{% block page_title %}{{ action }} Sales Order{% endblock %}
+{% block content %}
+<form method="post" id="soForm">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="card">
+            <div class="card-header"><h2>Order Header</h2>
+                {% if quote %}<span style="font-size:12px;color:#3b82f6;">From: {{ quote.quote_number }}</span>{% endif %}
+            </div>
+            <div class="card-body">
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label>Customer *</label>
+                        <select name="customer" class="form-control" required>
+                            <option value="">Select</option>
+                            {% for c in customers %}
+                            <option value="{{ c.pk }}" {% if quote and quote.customer_id == c.pk %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Customer PO #</label>
+                        <input type="text" name="customer_po_number" class="form-control" placeholder="Customer's PO reference">
+                    </div>
+                    <div class="form-group">
+                        <label>Currency</label>
+                        <select name="currency" class="form-control">
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Terms</label>
+                        <input type="text" name="payment_terms" class="form-control" placeholder="Net 30">
+                    </div>
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label>Shipping Address</label>
+                        <textarea name="shipping_address" class="form-control">{% if quote %}{{ quote.customer.shipping_address }}{% endif %}</textarea>
+                    </div>
+                    <div class="form-group" style="grid-column:span 2;">
+                        <label>Notes</label>
+                        <textarea name="notes" class="form-control"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Order Lines</h2>
+                <button type="button" class="btn btn-sm btn-primary" onclick="addLine()"><i class="fas fa-plus"></i> Add Line</button>
+            </div>
+            <div class="table-wrapper">
+                <table class="line-table">
+                    <thead><tr><th>#</th><th>Part #</th><th>Description</th><th>Qty</th><th>Sell Price</th><th>Cost</th><th>Margin</th><th></th></tr></thead>
+                    <tbody id="linesBody">
+                        {% if initial_lines %}
+                            {% for line in initial_lines %}
+                            <tr>
+                                <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+                                <td><input type="text" name="line_pn[]" value="{{ line.part_number_raw }}"></td>
+                                <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
+                                <td><input type="number" name="line_qty[]" value="{{ line.quantity }}" step="0.0001" class="qty" onchange="calcLine(this)"></td>
+                                <td><input type="number" name="line_sell[]" value="{{ line.sell_price }}" step="0.0001" class="sell" onchange="calcLine(this)"></td>
+                                <td><input type="number" name="line_cost[]" value="{{ line.cost }}" step="0.0001" class="cost" onchange="calcLine(this)"></td>
+                                <td><span class="margin-display" style="font-size:12px;font-weight:600;color:#94a3b8;">—</span></td>
+                                <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td style="color:#94a3b8;font-size:12px;">1</td>
+                            <td><input type="text" name="line_pn[]" placeholder="Part #"></td>
+                            <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+                            <td><input type="number" name="line_qty[]" step="0.0001" class="qty" onchange="calcLine(this)" placeholder="0"></td>
+                            <td><input type="number" name="line_sell[]" step="0.0001" class="sell" onchange="calcLine(this)" placeholder="0.00"></td>
+                            <td><input type="number" name="line_cost[]" step="0.0001" class="cost" onchange="calcLine(this)" placeholder="0.00"></td>
+                            <td><span class="margin-display" style="font-size:12px;font-weight:600;color:#94a3b8;">—</span></td>
+                            <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="card" style="position:sticky;top:70px;">
+        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Sales Order</button>
+            <a href="/sales-orders/" class="btn btn-secondary">Cancel</a>
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}
+{% block extra_js %}
+<script>
+let lineCount = document.querySelectorAll('#linesBody tr').length;
+function addLine() {
+    lineCount++;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="color:#94a3b8;font-size:12px;">${lineCount}</td>
+        <td><input type="text" name="line_pn[]" placeholder="Part #"></td>
+        <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+        <td><input type="number" name="line_qty[]" step="0.0001" class="qty" onchange="calcLine(this)"></td>
+        <td><input type="number" name="line_sell[]" step="0.0001" class="sell" onchange="calcLine(this)"></td>
+        <td><input type="number" name="line_cost[]" step="0.0001" class="cost" onchange="calcLine(this)"></td>
+        <td><span class="margin-display" style="font-size:12px;font-weight:600;color:#94a3b8;">—</span></td>
+        <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>`;
+    document.getElementById('linesBody').appendChild(tr);
+}
+function delRow(el) { if(document.querySelectorAll('#linesBody tr').length > 1) el.closest('tr').remove(); }
+function calcLine(el) {
+    const row = el.closest('tr');
+    const sell = parseFloat(row.querySelector('.sell')?.value) || 0;
+    const cost = parseFloat(row.querySelector('.cost')?.value) || 0;
+    const display = row.querySelector('.margin-display');
+    if(sell > 0) {
+        const m = ((sell - cost) / sell * 100).toFixed(1);
+        display.textContent = m + '%';
+        display.style.color = m >= 20 ? '#10b981' : m >= 10 ? '#f59e0b' : '#ef4444';
+    }
+}
+</script>
+{% endblock %}

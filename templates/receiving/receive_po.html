@@ -1,0 +1,158 @@
+{% extends "base/base.html" %}
+{% block title %}Receive {{ po.po_number }} — TradePlatform{% endblock %}
+{% block nav_receiving %}active{% endblock %}
+{% block page_title %}Receive Goods — {{ po.po_number }}{% endblock %}
+
+{% block content %}
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- PO Summary -->
+        <div class="card">
+            <div class="card-header"><h2>Purchase Order Info</h2></div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">PO Number</span><span class="value" style="font-weight:700;">{{ po.po_number }}</span></div>
+                        <div class="detail-row"><span class="label">Vendor</span><span class="value">{{ po.vendor.name }}</span></div>
+                        <div class="detail-row"><span class="label">Status</span><span class="value"><span class="badge badge-{{ po.status }}">{{ po.get_status_display }}</span></span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Expected Delivery</span><span class="value">{{ po.expected_delivery|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Linked SO</span><span class="value">
+                            {% if po.sales_order %}{{ po.sales_order.so_number }}{% else %}—{% endif %}
+                        </span></div>
+                        <div class="detail-row"><span class="label">Total Cost</span><span class="value" style="font-weight:700;">${{ po.total_cost|floatformat:2 }}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Line Receiving -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Receive Lines</h2>
+                <span style="font-size:12px;color:#64748b;">Enter quantities received. Leave blank to skip a line.</span>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Part #</th>
+                            <th>Description</th>
+                            <th>Ordered</th>
+                            <th>Already Received</th>
+                            <th>Outstanding</th>
+                            <th>Receive Now</th>
+                            <th>QC OK?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                        {% with outstanding=line.quantity|add:"-"|add:line.quantity_received %}
+                        <tr {% if line.quantity_received >= line.quantity %}style="background:#f0fdf4;"{% endif %}>
+                            <td style="color:#94a3b8;">{{ line.line_number }}</td>
+                            <td style="font-weight:600;font-family:monospace;">{{ line.part_number_raw }}</td>
+                            <td>{{ line.description|default:"—" }}</td>
+                            <td>{{ line.quantity }}</td>
+                            <td>
+                                <span {% if line.quantity_received > 0 %}style="color:#3b82f6;font-weight:600;"{% endif %}>
+                                    {{ line.quantity_received }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if line.quantity_received >= line.quantity %}
+                                    <span class="badge badge-approved">Complete</span>
+                                {% else %}
+                                    <span style="color:#f59e0b;font-weight:600;">
+                                        {{ line.quantity|floatformat:4 }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if line.quantity_received < line.quantity %}
+                                <input type="number"
+                                       name="qty_{{ line.pk }}"
+                                       step="0.0001"
+                                       min="0"
+                                       max="{{ line.quantity|floatformat:4 }}"
+                                       class="form-control"
+                                       style="width:100px;"
+                                       placeholder="0">
+                                {% else %}
+                                <span style="color:#94a3b8;font-size:12px;">Fully received</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if line.quantity_received < line.quantity %}
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                    <input type="checkbox" name="qc_{{ line.pk }}" checked> OK
+                                </label>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endwith %}
+                        {% empty %}
+                        <tr><td colspan="8" style="text-align:center;padding:24px;color:#94a3b8;">No lines</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- QC & Notes -->
+        <div class="card">
+            <div class="card-header"><h2>Quality Check &amp; Notes</h2></div>
+            <div class="card-body">
+                <div class="form-grid form-grid-2">
+                    <div class="form-group">
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+                            <input type="checkbox" name="quality_check" style="width:16px;height:16px;"> Overall Quality Check Passed
+                        </label>
+                    </div>
+                    <div></div>
+                    <div class="form-group">
+                        <label>Quality Notes</label>
+                        <textarea name="quality_notes" class="form-control" placeholder="Any issues, discrepancies or observations..."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>General Notes</label>
+                        <textarea name="notes" class="form-control" placeholder="Additional receiving notes..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:70px;">
+        <div class="card">
+            <div class="card-header"><h2>Confirm Receipt</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+                <div style="padding:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:12px;color:#92400e;">
+                    <i class="fas fa-exclamation-triangle" style="margin-right:6px;"></i>
+                    Submitting will generate a GRN and automatically update inventory stock levels.
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-check"></i> Confirm Receipt &amp; Update Inventory
+                </button>
+                <a href="/receiving/" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>What happens next?</h2></div>
+            <div class="card-body" style="font-size:12px;color:#64748b;line-height:1.7;">
+                <div>✅ A GRN number is auto-generated</div>
+                <div>✅ Inventory is updated automatically</div>
+                <div>✅ PO status updates to Partially/Fully Received</div>
+                <div>✅ Full traceability back to the PO is maintained</div>
+            </div>
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}

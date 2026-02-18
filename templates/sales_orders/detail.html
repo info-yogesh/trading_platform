@@ -1,0 +1,93 @@
+{% extends "base/base.html" %}
+{% block title %}{{ so.so_number }} — TradePlatform{% endblock %}
+{% block nav_so %}active{% endblock %}
+{% block page_title %}{{ so.so_number }}{% endblock %}
+{% block topbar_actions %}
+<a href="/sales-orders/{{ so.pk }}/edit/" class="btn btn-secondary btn-sm">Edit</a>
+<a href="/purchase-orders/create/?so={{ so.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-truck"></i> Create PO</a>
+{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="card">
+            <div class="card-header">
+                <h2>Sales Order</h2>
+                <span class="badge badge-{{ so.status }}">{{ so.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">SO Number</span><span class="value">{{ so.so_number }}</span></div>
+                        <div class="detail-row"><span class="label">Customer</span><span class="value">{{ so.customer.name }}</span></div>
+                        <div class="detail-row"><span class="label">Customer PO</span><span class="value">{{ so.customer_po_number|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Payment Terms</span><span class="value">{{ so.payment_terms|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Tracking</span><span class="value">{{ so.tracking_number|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Payment</span><span class="value">{% if so.payment_received %}<span class="badge badge-approved">Received</span>{% else %}<span class="badge badge-pending">Pending</span>{% endif %}</span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Total Value</span><span class="value" style="font-size:16px;font-weight:700;">${{ so.total_value|floatformat:2 }}</span></div>
+                        <div class="detail-row"><span class="label">Total Profit</span><span class="value" style="font-size:16px;font-weight:700;color:#10b981;">${{ so.total_profit|floatformat:2 }}</span></div>
+                        <div class="detail-row"><span class="label">Created</span><span class="value">{{ so.created_at|date:"d M Y" }}</span></div>
+                        <div class="detail-row"><span class="label">Linked POs</span><span class="value">{{ pos.count }}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>Order Lines</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>#</th><th>Part #</th><th>Description</th><th>Qty Ordered</th><th>Qty Shipped</th><th>Sell Price</th><th>Cost</th><th>Profit</th><th>Margin</th><th>Status</th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                        <tr>
+                            <td style="color:#94a3b8;">{{ line.line_number }}</td>
+                            <td style="font-weight:600;font-family:monospace;">{{ line.part_number_raw }}</td>
+                            <td>{{ line.description|default:"—" }}</td>
+                            <td>{{ line.quantity_ordered }}</td>
+                            <td>{{ line.quantity_shipped }}</td>
+                            <td>${{ line.sell_price|floatformat:4 }}</td>
+                            <td>{% if line.cost %}${{ line.cost|floatformat:4 }}{% else %}—{% endif %}</td>
+                            <td style="color:#10b981;font-weight:600;">${{ line.profit|floatformat:2 }}</td>
+                            <td>{% if line.margin_percent %}<span class="margin-badge {% if line.margin_percent >= 20 %}margin-good{% elif line.margin_percent >= 10 %}margin-warn{% else %}margin-bad{% endif %}">{{ line.margin_percent }}%</span>{% else %}—{% endif %}</td>
+                            <td><span class="badge badge-{{ line.status }}">{{ line.get_status_display }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        {% if pos %}
+        <div class="card">
+            <div class="card-header"><h2>Linked Purchase Orders</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>PO #</th><th>Vendor</th><th>Status</th><th>Expected Delivery</th><th></th></tr></thead>
+                    <tbody>
+                        {% for po in pos %}
+                        <tr>
+                            <td><a href="/purchase-orders/{{ po.pk }}/" style="color:#3b82f6;">{{ po.po_number }}</a></td>
+                            <td>{{ po.vendor.name }}</td>
+                            <td><span class="badge badge-{{ po.status }}">{{ po.get_status_display }}</span></td>
+                            <td>{{ po.expected_delivery|default:"—" }}</td>
+                            <td><a href="/purchase-orders/{{ po.pk }}/" class="btn btn-sm btn-secondary">View</a></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    <div class="card">
+        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            <a href="/purchase-orders/create/?so={{ so.pk }}" class="btn btn-primary"><i class="fas fa-truck"></i> Create PO</a>
+            <a href="/sales-orders/{{ so.pk }}/edit/" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit SO</a>
+            <button class="btn btn-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print Invoice</button>
+        </div>
+    </div>
+</div>
+{% endblock %}

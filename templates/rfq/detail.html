@@ -1,0 +1,131 @@
+{% extends "base/base.html" %}
+{% block title %}{{ rfq.rfq_number }} — TradePlatform{% endblock %}
+{% block nav_rfq %}active{% endblock %}
+{% block page_title %}{{ rfq.rfq_number }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/rfq/{{ rfq.pk }}/edit/" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+<a href="/quotes/create/?rfq={{ rfq.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-file-invoice-dollar"></i> Create Quote</a>
+{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+        <!-- Header Details -->
+        <div class="card">
+            <div class="card-header">
+                <h2>RFQ Details</h2>
+                <span class="badge badge-{{ rfq.status }}">{{ rfq.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">RFQ Number</span><span class="value">{{ rfq.rfq_number }}</span></div>
+                        <div class="detail-row"><span class="label">Customer</span><span class="value"><a href="/companies/{{ rfq.customer_id }}/">{{ rfq.customer.name }}</a></span></div>
+                        <div class="detail-row"><span class="label">Date Received</span><span class="value">{{ rfq.date_received }}</span></div>
+                        <div class="detail-row"><span class="label">Source</span><span class="value">{{ rfq.get_source_display }}</span></div>
+                        <div class="detail-row"><span class="label">Payment Terms</span><span class="value">{{ rfq.payment_terms|default:"—" }}</span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Total Lines</span><span class="value">{{ rfq.line_count }}</span></div>
+                        <div class="detail-row"><span class="label">Quoted Lines</span><span class="value">{{ rfq.quoted_line_count }}</span></div>
+                        <div class="detail-row"><span class="label">Assigned To</span><span class="value">{{ rfq.assigned_to|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Created By</span><span class="value">{{ rfq.created_by }}</span></div>
+                        <div class="detail-row"><span class="label">Created At</span><span class="value">{{ rfq.created_at|date:"d M Y H:i" }}</span></div>
+                    </div>
+                </div>
+                {% if rfq.external_notes %}
+                <div style="margin-top:12px;padding:10px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                    <div style="font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;margin-bottom:4px;">External Notes</div>
+                    <div style="font-size:13px;">{{ rfq.external_notes }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Line Items -->
+        <div class="card">
+            <div class="card-header">
+                <h2>Line Items ({{ rfq.line_count }})</h2>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn btn-sm btn-secondary" onclick="copyPNs()"><i class="fas fa-copy"></i> Copy PNs</button>
+                    <button class="btn btn-sm btn-secondary" onclick="copyTable()"><i class="fas fa-table"></i> Copy Table</button>
+                </div>
+            </div>
+            <div class="table-wrapper">
+                <table id="linesTable">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Part Number</th>
+                            <th>Description</th>
+                            <th>Qty</th>
+                            <th>CD</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for line in lines %}
+                        <tr>
+                            <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
+                            <td style="font-weight:600;font-family:monospace;">{{ line.part_number_raw }}</td>
+                            <td>{{ line.description|default:"—" }}</td>
+                            <td>{{ line.quantity }}</td>
+                            <td>{{ line.condition_required|default:"—" }}</td>
+                            <td><span class="badge badge-{{ line.line_status }}">{{ line.get_line_status_display }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="6" style="text-align:center;padding:24px;color:#94a3b8;">No lines added</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+        <!-- Actions -->
+        <div class="card">
+            <div class="card-header"><h2>Actions</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+                <a href="/quotes/create/?rfq={{ rfq.pk }}" class="btn btn-primary"><i class="fas fa-file-invoice-dollar"></i> Create Quote</a>
+                <a href="/rfq/{{ rfq.pk }}/edit/" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit RFQ</a>
+            </div>
+        </div>
+
+        <!-- Audit Log -->
+        <div class="card">
+            <div class="card-header"><h2>Audit Log</h2></div>
+            <div class="card-body" style="padding:0;">
+                {% for log in audit_logs %}
+                <div style="padding:10px 16px;border-bottom:1px solid #f1f5f9;font-size:12px;">
+                    <div style="font-weight:600;color:#1e293b;">{{ log.field_changed }}</div>
+                    <div style="color:#64748b;">{{ log.old_value }} → {{ log.new_value }}</div>
+                    <div style="color:#94a3b8;margin-top:2px;">{{ log.changed_by.username }} · {{ log.timestamp|date:"d M H:i" }}</div>
+                </div>
+                {% empty %}
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No changes logged</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function copyPNs() {
+    const pns = [...document.querySelectorAll('#linesTable tbody tr td:nth-child(2)')].map(td => td.textContent.trim()).join('\n');
+    navigator.clipboard.writeText(pns).then(() => alert('Part numbers copied!'));
+}
+function copyTable() {
+    const rows = document.querySelectorAll('#linesTable tbody tr');
+    const text = [...rows].map(tr => {
+        const cells = [...tr.querySelectorAll('td')];
+        return [cells[1], cells[2], cells[3]].map(c => c?.textContent.trim() || '').join('\t');
+    }).join('\n');
+    navigator.clipboard.writeText(text).then(() => alert('Table copied!'));
+}
+</script>
+{% endblock %}

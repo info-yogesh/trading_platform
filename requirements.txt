@@ -1,0 +1,14 @@
+Django>=4.2,<5.0
+Pillow>=10.0.0
+openpyxl>=3.1.0
+xlrd>=2.0.1
+reportlab>=4.0.0
+requests>=2.31.0
+python-decouple>=3.8
+whitenoise>=6.6.0
+google-auth>=2.0
+google-auth-oauthlib>=1.0
+google-api-python-client>=2.0
+celery>=5.3
+django-celery-beat>=2.5   # for periodic tasks
+redis>=5.0                # broker

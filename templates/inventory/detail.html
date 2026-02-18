@@ -1,0 +1,70 @@
+{% extends "base/base.html" %}
+{% block title %}{{ item.part.part_number }} — Inventory — TradePlatform{% endblock %}
+{% block nav_inventory %}active{% endblock %}
+{% block page_title %}Inventory: {{ item.part.part_number }}{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div class="card">
+        <div class="card-header">
+            <h2>Inventory Item</h2>
+            <span class="badge {% if item.item_type == 'own_stock' %}badge-approved{% elif item.item_type == 'vendor_offer' %}badge-sent{% else %}badge-closed{% endif %}">
+                {{ item.get_item_type_display }}
+            </span>
+        </div>
+        <div class="card-body">
+            <div class="detail-grid">
+                <div>
+                    <div class="detail-row">
+                        <span class="label">Part Number</span>
+                        <span class="value" style="font-family:monospace;font-weight:700;">
+                            <a href="/parts/{{ item.part_id }}/" style="color:#3b82f6;text-decoration:none;">{{ item.part.part_number }}</a>
+                        </span>
+                    </div>
+                    <div class="detail-row"><span class="label">Description</span><span class="value">{{ item.description|default:item.part.description|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Type</span><span class="value">{{ item.get_item_type_display }}</span></div>
+                    <div class="detail-row"><span class="label">Condition</span><span class="value">{{ item.condition|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Location</span><span class="value">{{ item.location|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Reference Tag</span><span class="value">{{ item.reference_tag|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Lead Time</span><span class="value">{{ item.lead_time|default:"—" }}</span></div>
+                </div>
+                <div>
+                    <div class="detail-row">
+                        <span class="label">Qty Total</span>
+                        <span class="value" style="font-size:20px;font-weight:800;color:#1a2744;">{{ item.quantity }}</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="label">Qty Available</span>
+                        <span class="value" style="font-size:18px;font-weight:700;color:#10b981;">{{ item.quantity_available }}</span>
+                    </div>
+                    <div class="detail-row"><span class="label">Unit Cost</span><span class="value" style="font-weight:600;">{% if item.cost %}${{ item.cost|floatformat:4 }} {{ item.currency }}{% else %}—{% endif %}</span></div>
+                    <div class="detail-row"><span class="label">Vendor</span><span class="value">
+                        {% if item.vendor %}<a href="/companies/{{ item.vendor_id }}/" style="color:#3b82f6;text-decoration:none;">{{ item.vendor.name }}</a>{% else %}—{% endif %}
+                    </span></div>
+                    <div class="detail-row"><span class="label">Expiry Date</span><span class="value">{{ item.expiration_date|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Linked PO</span><span class="value">
+                        {% if item.linked_po %}<a href="/purchase-orders/{{ item.linked_po_id }}/" style="color:#3b82f6;text-decoration:none;">{{ item.linked_po.po_number }}</a>{% else %}—{% endif %}
+                    </span></div>
+                    <div class="detail-row"><span class="label">Added By</span><span class="value">{{ item.created_by|default:"—" }}</span></div>
+                    <div class="detail-row"><span class="label">Date Added</span><span class="value">{{ item.created_at|date:"d M Y H:i" }}</span></div>
+                </div>
+            </div>
+            {% if item.internal_notes %}
+            <div style="margin-top:16px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;">
+                <strong>Internal Notes:</strong> {{ item.internal_notes }}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            <a href="/parts/{{ item.part_id }}/" class="btn btn-secondary"><i class="fas fa-microchip"></i> View Part Master</a>
+            {% if item.linked_po %}
+            <a href="/purchase-orders/{{ item.linked_po_id }}/" class="btn btn-secondary"><i class="fas fa-truck"></i> View Source PO</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

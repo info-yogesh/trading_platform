@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — TradePlatform</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: linear-gradient(135deg, #1a2744 0%, #243460 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .login-card { background: white; border-radius: 12px; padding: 40px; width: 100%; max-width: 400px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); }
+        .login-brand { text-align: center; margin-bottom: 32px; }
+        .login-brand h1 { font-size: 22px; font-weight: 800; color: #1a2744; }
+        .login-brand h1 span { color: #3b82f6; }
+        .login-brand p { color: #64748b; font-size: 13px; margin-top: 4px; }
+        .form-group { margin-bottom: 16px; }
+        .form-group label { display: block; font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .form-group input { width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 7px; font-size: 14px; outline: none; transition: border-color 0.15s; }
+        .form-group input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+        .btn-login { width: 100%; padding: 11px; background: #3b82f6; color: white; border: none; border-radius: 7px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background 0.15s; }
+        .btn-login:hover { background: #2563eb; }
+        .error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 10px 14px; border-radius: 7px; font-size: 13px; margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="login-brand">
+            <h1>Trade<span>Platform</span></h1>
+        </div>
+        {% if form.errors %}
+        <div class="error">Invalid username or password. Please try again.</div>
+        {% endif %}
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" autofocus placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" placeholder="Enter your password">
+            </div>
+            <button type="submit" class="btn-login">Sign In</button>
+        </form>
+    </div>
+</body>
+</html>

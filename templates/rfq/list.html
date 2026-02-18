@@ -1,0 +1,82 @@
+{% extends "base/base.html" %}
+{% block title %}RFQs — TradePlatform{% endblock %}
+{% block nav_rfq %}active{% endblock %}
+{% block page_title %}RFQs{% endblock %}
+
+{% block topbar_actions %}
+<a href="/rfq/create/" class="btn btn-primary"><i class="fas fa-plus"></i> New RFQ</a>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>All RFQs</h2>
+        <form method="get" class="filters">
+            <div class="search-input">
+                <i class="fas fa-search"></i>
+                <input type="text" name="q" value="{{ q }}" placeholder="Search RFQ# or customer..." class="form-control" style="width:220px;">
+            </div>
+            <select name="status" class="form-control" style="width:160px;">
+                <option value="">All Statuses</option>
+                {% for val, label in status_choices %}
+                <option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Filter</button>
+            {% if q or status %}<a href="/rfq/" class="btn btn-secondary">Clear</a>{% endif %}
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>RFQ #</th>
+                    <th>Customer</th>
+                    <th>Date</th>
+                    <th>Lines</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Assigned To</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for rfq in page %}
+                <tr>
+                    <td><a href="/rfq/{{ rfq.pk }}/" style="font-weight:600;color:#3b82f6;text-decoration:none;">{{ rfq.rfq_number }}</a></td>
+                    <td>{{ rfq.customer.name }}</td>
+                    <td>{{ rfq.date_received }}</td>
+                    <td>
+                        <span>{{ rfq.line_count }}</span>
+                        {% if rfq.quoted_line_count > 0 %}
+                        <span style="color:#10b981;font-size:11px;">({{ rfq.quoted_line_count }} quoted)</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-closed">{{ rfq.get_source_display }}</span></td>
+                    <td>
+                        <span class="badge badge-{{ rfq.status|lower }}">{{ rfq.get_status_display }}</span>
+                    </td>
+                    <td>{{ rfq.assigned_to.username|default:"—" }}</td>
+                    <td>
+                        <a href="/rfq/{{ rfq.pk }}/" class="btn btn-sm btn-secondary">View</a>
+                        <a href="/rfq/{{ rfq.pk }}/edit/" class="btn btn-sm btn-secondary">Edit</a>
+                        <a href="/quotes/create/?rfq={{ rfq.pk }}" class="btn btn-sm btn-primary">Quote</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="8" style="text-align:center;padding:32px;color:#64748b;">No RFQs found. <a href="/rfq/create/" style="color:#3b82f6;">Create the first one →</a></td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% if page.has_other_pages %}
+    <div style="padding:12px 20px;border-top:1px solid #e2e8f0;">
+        <div class="pagination">
+            {% if page.has_previous %}<a href="?page={{ page.previous_page_number }}&q={{ q }}&status={{ status }}">‹</a>{% endif %}
+            <span class="current">{{ page.number }} / {{ page.paginator.num_pages }}</span>
+            {% if page.has_next %}<a href="?page={{ page.next_page_number }}&q={{ q }}&status={{ status }}">›</a>{% endif %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

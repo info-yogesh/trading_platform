@@ -1,0 +1,108 @@
+{% extends "base/base.html" %}
+{% block title %}{{ action }} Inventory Item — TradePlatform{% endblock %}
+{% block nav_inventory %}active{% endblock %}
+{% block page_title %}{{ action }} Inventory Item{% endblock %}
+
+{% block content %}
+<form method="post">
+{% csrf_token %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div class="card">
+        <div class="card-header"><h2>Item Details</h2></div>
+        <div class="card-body">
+            <div class="form-grid form-grid-2">
+                <div class="form-group">
+                    <label>Item Type</label>
+                    <select name="item_type" class="form-control">
+                        <option value="own_stock">Own Stock</option>
+                        <option value="vendor_offer">Vendor Offer</option>
+                        <option value="customer_offer">Customer Offer</option>
+                        <option value="push_list">Push List</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Part *</label>
+                    <select name="part" class="form-control" required>
+                        <option value="">Select Part</option>
+                        {% for p in parts %}
+                        <option value="{{ p.pk }}">{{ p.part_number }} — {{ p.description|truncatechars:50 }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column:span 2;">
+                    <label>Description Override <small style="text-transform:none;font-weight:400;">(optional, overrides part description)</small></label>
+                    <textarea name="description" class="form-control" rows="2" placeholder="Leave blank to use part master description"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Quantity *</label>
+                    <input type="number" name="quantity" class="form-control" step="0.0001" min="0" required placeholder="0">
+                </div>
+                <div class="form-group">
+                    <label>Condition</label>
+                    <select name="condition" class="form-control">
+                        <option value="">— Any —</option>
+                        <option value="new">New</option>
+                        <option value="used">Used</option>
+                        <option value="refurbished">Refurbished</option>
+                        <option value="as_is">As-Is</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Unit Cost</label>
+                    <input type="number" name="cost" class="form-control" step="0.0001" min="0" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label>Currency</label>
+                    <select name="currency" class="form-control">
+                        <option value="USD">USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="GBP">GBP</option>
+                        <option value="AED">AED</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Location</label>
+                    <input type="text" name="location" class="form-control" placeholder="e.g. Warehouse A, Shelf 3">
+                </div>
+                <div class="form-group">
+                    <label>Lead Time</label>
+                    <input type="text" name="lead_time" class="form-control" placeholder="e.g. 5-7 days, ex-stock">
+                </div>
+                <div class="form-group">
+                    <label>Reference Tag</label>
+                    <input type="text" name="reference_tag" class="form-control" placeholder="Internal reference or batch #">
+                </div>
+                <div class="form-group">
+                    <label>Expiration Date <small style="text-transform:none;font-weight:400;">(for vendor offers)</small></label>
+                    <input type="date" name="expiration_date" class="form-control">
+                </div>
+                <div class="form-group">
+                    <label>Vendor / Supplier</label>
+                    <select name="vendor" class="form-control">
+                        <option value="">— None —</option>
+                        {% for v in vendors %}
+                        <option value="{{ v.pk }}">{{ v.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="grid-column:span 2;">
+                    <label>Internal Notes</label>
+                    <textarea name="internal_notes" class="form-control" placeholder="Any internal notes about this stock item..."></textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="position:sticky;top:70px;">
+        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save Item</button>
+            <a href="/inventory/" class="btn btn-secondary">Cancel</a>
+        </div>
+        <div style="padding:16px;border-top:1px solid #f1f5f9;font-size:12px;color:#64748b;line-height:1.6;">
+            <strong>Note:</strong> When items are received via a PO, inventory is updated automatically. Use this form for manual stock additions.
+        </div>
+    </div>
+</div>
+</form>
+{% endblock %}

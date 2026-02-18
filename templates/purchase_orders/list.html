@@ -1,0 +1,47 @@
+{% extends "base/base.html" %}
+{% block title %}Purchase Orders — TradePlatform{% endblock %}
+{% block nav_po %}active{% endblock %}
+{% block page_title %}Purchase Orders{% endblock %}
+{% block topbar_actions %}
+<a href="/purchase-orders/create/" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New PO</a>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Purchase Orders</h2>
+        <form method="get" class="filters">
+            <div class="search-input"><i class="fas fa-search"></i>
+                <input type="text" name="q" value="{{ q }}" class="form-control" style="width:200px;" placeholder="Search PO#...">
+            </div>
+            <select name="status" class="form-control" style="width:160px;">
+                <option value="">All Statuses</option>
+                {% for val, label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Filter</button>
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>PO #</th><th>Vendor</th><th>Linked SO</th><th>Status</th><th>Expected Delivery</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for po in page %}
+                <tr>
+                    <td><a href="/purchase-orders/{{ po.pk }}/" style="font-weight:600;color:#3b82f6;text-decoration:none;">{{ po.po_number }}</a></td>
+                    <td>{{ po.vendor.name }}</td>
+                    <td>{% if po.sales_order %}<a href="/sales-orders/{{ po.sales_order_id }}/" style="color:#3b82f6;">{{ po.sales_order.so_number }}</a>{% else %}—{% endif %}</td>
+                    <td><span class="badge badge-{{ po.status }}">{{ po.get_status_display }}</span></td>
+                    <td>{{ po.expected_delivery|default:"—" }}</td>
+                    <td>{{ po.created_at|date:"d M Y" }}</td>
+                    <td>
+                        <a href="/purchase-orders/{{ po.pk }}/" class="btn btn-sm btn-secondary">View</a>
+                        <a href="/receiving/po/{{ po.pk }}/receive/" class="btn btn-sm btn-primary">Receive</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" style="text-align:center;padding:32px;color:#64748b;">No purchase orders.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base/base.html" %}
+{% block title %}Quotes — TradePlatform{% endblock %}
+{% block nav_quotes %}active{% endblock %}
+{% block page_title %}Quotes{% endblock %}
+{% block topbar_actions %}
+<a href="/quotes/create/" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> New Quote</a>
+{% endblock %}
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>All Quotes</h2>
+        <form method="get" class="filters">
+            <div class="search-input"><i class="fas fa-search"></i>
+                <input type="text" name="q" value="{{ q }}" class="form-control" style="width:200px;" placeholder="Search quote #...">
+            </div>
+            <select name="status" class="form-control" style="width:140px;">
+                <option value="">All Statuses</option>
+                {% for val, label in status_choices %}<option value="{{ val }}" {% if status == val %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="btn btn-secondary">Filter</button>
+        </form>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead><tr><th>Quote #</th><th>Customer</th><th>RFQ</th><th>Currency</th><th>Total</th><th>Margin</th><th>Status</th><th>Date</th><th>Actions</th></tr></thead>
+            <tbody>
+                {% for quote in page %}
+                <tr>
+                    <td><a href="/quotes/{{ quote.pk }}/" style="font-weight:600;color:#3b82f6;text-decoration:none;">{{ quote.quote_number }}</a></td>
+                    <td>{{ quote.customer.name }}</td>
+                    <td>{% if quote.rfq %}<a href="/rfq/{{ quote.rfq_id }}/" style="color:#3b82f6;text-decoration:none;">{{ quote.rfq.rfq_number }}</a>{% else %}—{% endif %}</td>
+                    <td>{{ quote.currency }}</td>
+                    <td>${{ quote.total_sell|floatformat:2 }}</td>
+                    <td>
+                        {% if quote.total_margin > 20 %}<span class="margin-badge margin-good">{{ quote.total_margin }}%</span>
+                        {% elif quote.total_margin > 10 %}<span class="margin-badge margin-warn">{{ quote.total_margin }}%</span>
+                        {% else %}<span class="margin-badge margin-bad">{{ quote.total_margin }}%</span>
+                        {% endif %}
+                    </td>
+                    <td><span class="badge badge-{{ quote.status }}">{{ quote.get_status_display }}</span></td>
+                    <td>{{ quote.created_at|date:"d M Y" }}</td>
+                    <td>
+                        <a href="/quotes/{{ quote.pk }}/" class="btn btn-sm btn-secondary">View</a>
+                        <a href="/sales-orders/create/?quote={{ quote.pk }}" class="btn btn-sm btn-primary">→ SO</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="9" style="text-align:center;padding:32px;color:#64748b;">No quotes found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

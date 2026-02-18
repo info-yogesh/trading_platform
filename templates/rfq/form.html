@@ -1,0 +1,219 @@
+{% extends "base/base.html" %}
+{% block title %}{{ action }} RFQ — TradePlatform{% endblock %}
+{% block nav_rfq %}active{% endblock %}
+{% block page_title %}{{ action }} RFQ{% endblock %}
+
+{% block content %}
+<form method="post" id="rfqForm">
+    {% csrf_token %}
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+        <!-- Main Form -->
+        <div style="display:flex;flex-direction:column;gap:20px;">
+            <!-- Header -->
+            <div class="card">
+                <div class="card-header"><h2>RFQ Header</h2></div>
+                <div class="card-body">
+                    <div class="form-grid form-grid-2">
+                        <div class="form-group">
+                            <label>Customer *</label>
+                            <select name="customer" class="form-control" required>
+                                <option value="">Select Customer</option>
+                                {% for c in customers %}
+                                <option value="{{ c.pk }}" {% if rfq and rfq.customer_id == c.pk %}selected{% endif %}>{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Source</label>
+                            <select name="source" class="form-control">
+                                <option value="manual">Manual</option>
+                                <option value="email">Email</option>
+                                <option value="bulk_paste">Bulk Paste</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Payment Terms</label>
+                            <input type="text" name="payment_terms" class="form-control" value="{% if rfq %}{{ rfq.payment_terms }}{% endif %}" placeholder="e.g. Net 30">
+                        </div>
+                        <div class="form-group">
+                            <label>Status</label>
+                            <select name="status" class="form-control">
+                                <option value="open">Open</option>
+                                {% if rfq %}
+                                <option value="waiting_vendor" {% if rfq.status == 'waiting_vendor' %}selected{% endif %}>Waiting Vendor Response</option>
+                                <option value="won" {% if rfq.status == 'won' %}selected{% endif %}>Won</option>
+                                <option value="lost" {% if rfq.status == 'lost' %}selected{% endif %}>Lost</option>
+                                <option value="closed" {% if rfq.status == 'closed' %}selected{% endif %}>Closed</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="form-group" style="grid-column:span 2;">
+                            <label>Delivery Address</label>
+                            <textarea name="delivery_address" class="form-control">{% if rfq %}{{ rfq.delivery_address }}{% endif %}</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Internal Notes <small style="text-transform:none;font-weight:400;">(not shown to customer)</small></label>
+                            <textarea name="internal_notes" class="form-control">{% if rfq %}{{ rfq.internal_notes }}{% endif %}</textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>External Notes <small style="text-transform:none;font-weight:400;">(visible to customer)</small></label>
+                            <textarea name="external_notes" class="form-control">{% if rfq %}{{ rfq.external_notes }}{% endif %}</textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Line Items -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Line Items</h2>
+                    <div style="display:flex;gap:8px;">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="openPasteModal()"><i class="fas fa-paste"></i> Paste Import</button>
+                        <button type="button" class="btn btn-sm btn-primary" onclick="addLine()"><i class="fas fa-plus"></i> Add Line</button>
+                    </div>
+                </div>
+                <div class="table-wrapper">
+                    <table class="line-table" id="lineTable">
+                        <thead>
+                            <tr>
+                                <th style="width:30px;">#</th>
+                                <th style="min-width:150px;">Part Number *</th>
+                                <th style="min-width:200px;">Description</th>
+                                <th style="width:80px;">Qty *</th>
+                                <th style="width:80px;">CD</th>
+                                <th style="width:40px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="linesBody">
+                            {% if rfq %}
+                                {% for line in rfq.lines.all %}
+                                <tr>
+                                    <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
+                                    <td><input type="text" name="line_pn[]" value="{{ line.part_number_raw }}" class="pn-input" required></td>
+                                    <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
+                                    <td><input type="number" name="line_qty[]" value="{{ line.quantity }}" step="0.0001" min="0"></td>
+                                    <td><input type="text" name="line_cd[]" value="{{ line.condition_required }}"></td>
+                                    <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td style="color:#94a3b8;font-size:12px;">1</td>
+                                    <td><input type="text" name="line_pn[]" class="pn-input" required placeholder="Part #"></td>
+                                    <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+                                    <td><input type="number" name="line_qty[]" step="0.0001" min="0" placeholder="0"></td>
+                                    <td><input type="text" name="line_cd[]" placeholder="New/Used..."></td>
+                                    <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="padding:10px 16px;display:flex;gap:8px;border-top:1px solid #f1f5f9;">
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="copyPNColumn()"><i class="fas fa-copy"></i> Copy PN Column</button>
+                    <button type="button" class="btn btn-sm btn-secondary" onclick="copyFullTable()"><i class="fas fa-table"></i> Copy Full Table</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="card" style="position:sticky;top:70px;">
+            <div class="card-header"><h2>Actions</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:10px;">
+                <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save RFQ</button>
+                <a href="/rfq/" class="btn btn-secondary"><i class="fas fa-times"></i> Cancel</a>
+            </div>
+        </div>
+    </div>
+</form>
+
+<!-- Paste Import Modal -->
+<div id="pasteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:1000;display:none;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:10px;padding:24px;width:600px;max-width:90vw;">
+        <h3 style="margin-bottom:12px;font-size:15px;">Paste Import</h3>
+        <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Paste tab-separated or comma-separated data: PN, Description, Qty, CD</p>
+        <textarea id="pasteText" style="width:100%;height:200px;padding:10px;border:1px solid #e2e8f0;border-radius:6px;font-family:monospace;font-size:13px;" placeholder="PART-123&#9;Capacitor 100uF&#9;50&#9;New&#10;PART-456&#9;Resistor 10k&#9;100&#9;Used"></textarea>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+            <button class="btn btn-primary" onclick="parsePaste()">Import Lines</button>
+            <button class="btn btn-secondary" onclick="closePasteModal()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let lineCount = document.querySelectorAll('#linesBody tr').length;
+
+function addLine(pn='', desc='', qty='', cd='') {
+    lineCount++;
+    const tbody = document.getElementById('linesBody');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td style="color:#94a3b8;font-size:12px;">${lineCount}</td>
+        <td><input type="text" name="line_pn[]" value="${pn}" class="pn-input" placeholder="Part #"></td>
+        <td><input type="text" name="line_desc[]" value="${desc}" placeholder="Description"></td>
+        <td><input type="number" name="line_qty[]" value="${qty}" step="0.0001" min="0" placeholder="0"></td>
+        <td><input type="text" name="line_cd[]" value="${cd}" placeholder="New/Used..."></td>
+        <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+    `;
+    tbody.appendChild(tr);
+}
+
+function delRow(el) {
+    const row = el.closest('tr');
+    if (document.querySelectorAll('#linesBody tr').length > 1) {
+        row.remove();
+    }
+}
+
+function openPasteModal() {
+    document.getElementById('pasteModal').style.display = 'flex';
+}
+function closePasteModal() {
+    document.getElementById('pasteModal').style.display = 'none';
+}
+
+function parsePaste() {
+    const text = document.getElementById('pasteText').value.trim();
+    const rows = text.split('\n');
+    rows.forEach(row => {
+        const parts = row.includes('\t') ? row.split('\t') : row.split(',');
+        if (parts.length >= 1 && parts[0].trim()) {
+            addLine(
+                parts[0]?.trim() || '',
+                parts[1]?.trim() || '',
+                parts[2]?.trim() || '',
+                parts[3]?.trim() || '',
+            );
+        }
+    });
+    closePasteModal();
+}
+
+function copyPNColumn() {
+    const pns = [...document.querySelectorAll('[name="line_pn[]"]')].map(i => i.value).join('\n');
+    navigator.clipboard.writeText(pns).then(() => showToast('PN column copied!'));
+}
+
+function copyFullTable() {
+    const rows = document.querySelectorAll('#linesBody tr');
+    const text = [...rows].map(tr => {
+        const pn = tr.querySelector('[name="line_pn[]"]')?.value || '';
+        const desc = tr.querySelector('[name="line_desc[]"]')?.value || '';
+        const qty = tr.querySelector('[name="line_qty[]"]')?.value || '';
+        return [pn, desc, qty].join('\t');
+    }).join('\n');
+    navigator.clipboard.writeText(text).then(() => showToast('Table copied!'));
+}
+
+function showToast(msg) {
+    const t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#1a2744;color:white;padding:10px 16px;border-radius:7px;font-size:13px;z-index:9999;';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+}
+</script>
+{% endblock %}

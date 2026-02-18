@@ -1,0 +1,88 @@
+{% extends "base/base.html" %}
+{% block title %}{{ company.name }} — TradePlatform{% endblock %}
+{% block nav_companies %}active{% endblock %}
+{% block page_title %}{{ company.name }}{% endblock %}
+{% block topbar_actions %}
+<a href="/companies/{{ company.pk }}/edit/" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="card">
+            <div class="card-header">
+                <h2>Company Info</h2>
+                <span class="badge badge-{{ company.company_type }}">{{ company.get_company_type_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">Name</span><span class="value">{{ company.name }}</span></div>
+                        <div class="detail-row"><span class="label">Type</span><span class="value">{{ company.get_company_type_display }}</span></div>
+                        <div class="detail-row"><span class="label">Currency</span><span class="value">{{ company.default_currency }}</span></div>
+                        <div class="detail-row"><span class="label">Payment Terms</span><span class="value">{{ company.payment_terms|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Tax ID</span><span class="value">{{ company.tax_id|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Credit Limit</span><span class="value">{% if company.credit_limit %}${{ company.credit_limit }}{% else %}—{% endif %}</span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Billing Address</span><span class="value">{{ company.billing_address|default:"—"|linebreaksbr }}</span></div>
+                        <div class="detail-row"><span class="label">Shipping Address</span><span class="value">{{ company.shipping_address|default:"—"|linebreaksbr }}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Contacts</h2>
+                <button class="btn btn-sm btn-primary" onclick="document.getElementById('contactForm').style.display='block'"><i class="fas fa-plus"></i> Add</button>
+            </div>
+            <div id="contactForm" style="display:none;padding:16px;border-bottom:1px solid #e2e8f0;background:#f8fafc;">
+                <form method="post" action="/companies/{{ company.pk }}/contacts/add/">
+                    {% csrf_token %}
+                    <div class="form-grid form-grid-3" style="margin-bottom:10px;">
+                        <div class="form-group"><label>First Name *</label><input type="text" name="first_name" class="form-control" required></div>
+                        <div class="form-group"><label>Last Name</label><input type="text" name="last_name" class="form-control"></div>
+                        <div class="form-group"><label>Title</label><input type="text" name="title" class="form-control"></div>
+                        <div class="form-group"><label>Email</label><input type="email" name="email" class="form-control"></div>
+                        <div class="form-group"><label>Phone</label><input type="text" name="phone" class="form-control"></div>
+                        <div class="form-group"><label>Primary?</label><br><label style="display:flex;align-items:center;gap:6px;margin-top:8px;"><input type="checkbox" name="is_primary"> Primary Contact</label></div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-sm">Save Contact</button>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('contactForm').style.display='none'">Cancel</button>
+                </form>
+            </div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>Name</th><th>Title</th><th>Email</th><th>Phone</th><th>Primary</th></tr></thead>
+                    <tbody>
+                        {% for c in contacts %}
+                        <tr>
+                            <td>{{ c.first_name }} {{ c.last_name }}</td>
+                            <td>{{ c.title|default:"—" }}</td>
+                            <td><a href="mailto:{{ c.email }}">{{ c.email|default:"—" }}</a></td>
+                            <td>{{ c.phone|default:"—" }}</td>
+                            <td>{% if c.is_primary %}<span class="badge badge-success">Primary</span>{% endif %}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" style="text-align:center;padding:20px;color:#94a3b8;">No contacts</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h2>Quick Links</h2></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+            {% if company.company_type != 'vendor' %}
+            <a href="/rfq/?customer={{ company.pk }}" class="btn btn-secondary btn-sm"><i class="fas fa-file-alt"></i> View RFQs</a>
+            <a href="/quotes/?customer={{ company.pk }}" class="btn btn-secondary btn-sm"><i class="fas fa-file-invoice"></i> View Quotes</a>
+            <a href="/sales-orders/?customer={{ company.pk }}" class="btn btn-secondary btn-sm"><i class="fas fa-shopping-cart"></i> View SOs</a>
+            {% endif %}
+            {% if company.company_type != 'customer' %}
+            <a href="/purchase-orders/?vendor={{ company.pk }}" class="btn btn-secondary btn-sm"><i class="fas fa-truck"></i> View POs</a>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

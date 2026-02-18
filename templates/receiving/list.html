@@ -1,0 +1,90 @@
+{% extends "base/base.html" %}
+{% block title %}Receiving — TradePlatform{% endblock %}
+{% block nav_receiving %}active{% endblock %}
+{% block page_title %}Receiving{% endblock %}
+
+{% block content %}
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+    <!-- Open POs pending receipt -->
+    <div class="card">
+        <div class="card-header"><h2>Open POs — Awaiting Receipt</h2></div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>PO #</th>
+                        <th>Vendor</th>
+                        <th>Expected</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for po in open_pos %}
+                    <tr>
+                        <td><a href="/purchase-orders/{{ po.pk }}/" style="font-weight:600;color:#3b82f6;text-decoration:none;">{{ po.po_number }}</a></td>
+                        <td>{{ po.vendor.name }}</td>
+                        <td>{{ po.expected_delivery|default:"—" }}</td>
+                        <td><span class="badge badge-{{ po.status }}">{{ po.get_status_display }}</span></td>
+                        <td>
+                            <a href="/receiving/po/{{ po.pk }}/receive/" class="btn btn-sm btn-primary">
+                                <i class="fas fa-box-open"></i> Receive
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" style="text-align:center;padding:24px;color:#64748b;">
+                            <i class="fas fa-check-circle" style="color:#10b981;margin-right:6px;"></i>
+                            No POs pending receipt
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Recent GRNs -->
+    <div class="card">
+        <div class="card-header"><h2>Recent Goods Receipts (GRNs)</h2></div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>GRN #</th>
+                        <th>PO #</th>
+                        <th>Vendor</th>
+                        <th>Date</th>
+                        <th>QC</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for grn in grns %}
+                    <tr>
+                        <td style="font-weight:600;color:#3b82f6;">{{ grn.grn_number }}</td>
+                        <td><a href="/purchase-orders/{{ grn.purchase_order_id }}/" style="color:#3b82f6;text-decoration:none;">{{ grn.purchase_order.po_number }}</a></td>
+                        <td>{{ grn.purchase_order.vendor.name }}</td>
+                        <td>{{ grn.received_date }}</td>
+                        <td>
+                            {% if grn.quality_check_passed %}
+                                <span class="badge badge-approved">Passed</span>
+                            {% else %}
+                                <span class="badge badge-danger">Failed</span>
+                            {% endif %}
+                        </td>
+                        <td><span class="badge badge-{{ grn.status }}">{{ grn.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" style="text-align:center;padding:24px;color:#94a3b8;">No receipts yet</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

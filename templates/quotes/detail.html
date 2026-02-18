@@ -1,0 +1,91 @@
+{% extends "base/base.html" %}
+{% block title %}{{ quote.quote_number }} — TradePlatform{% endblock %}
+{% block nav_quotes %}active{% endblock %}
+{% block page_title %}{{ quote.quote_number }}{% endblock %}
+{% block topbar_actions %}
+<a href="/quotes/{{ quote.pk }}/edit/" class="btn btn-secondary btn-sm"><i class="fas fa-edit"></i> Edit</a>
+<a href="/sales-orders/create/?quote={{ quote.pk }}" class="btn btn-primary btn-sm"><i class="fas fa-shopping-cart"></i> Create SO</a>
+{% endblock %}
+{% block content %}
+<div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
+    <div style="display:flex;flex-direction:column;gap:20px;">
+        <div class="card">
+            <div class="card-header">
+                <h2>Quote Details</h2>
+                <span class="badge badge-{{ quote.status }}">{{ quote.get_status_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="detail-grid">
+                    <div>
+                        <div class="detail-row"><span class="label">Quote #</span><span class="value">{{ quote.quote_number }}</span></div>
+                        <div class="detail-row"><span class="label">Customer</span><span class="value">{{ quote.customer.name }}</span></div>
+                        <div class="detail-row"><span class="label">Linked RFQ</span><span class="value">{% if quote.rfq %}<a href="/rfq/{{ quote.rfq_id }}/" style="color:#3b82f6;">{{ quote.rfq.rfq_number }}</a>{% else %}—{% endif %}</span></div>
+                        <div class="detail-row"><span class="label">Currency</span><span class="value">{{ quote.currency }}</span></div>
+                        <div class="detail-row"><span class="label">Valid Days</span><span class="value">{{ quote.validity_days }} days</span></div>
+                    </div>
+                    <div>
+                        <div class="detail-row"><span class="label">Total Sell</span><span class="value" style="font-size:16px;font-weight:700;color:#1e293b;">${{ quote.total_sell|floatformat:2 }}</span></div>
+                        <div class="detail-row"><span class="label">Total Cost</span><span class="value">${{ quote.total_cost|floatformat:2 }}</span></div>
+                        <div class="detail-row"><span class="label">Gross Margin</span><span class="value">
+                            {% if quote.total_margin >= 20 %}<span style="color:#10b981;font-weight:700;">{{ quote.total_margin }}%</span>
+                            {% elif quote.total_margin >= 10 %}<span style="color:#f59e0b;font-weight:700;">{{ quote.total_margin }}%</span>
+                            {% else %}<span style="color:#ef4444;font-weight:700;">{{ quote.total_margin }}%</span>
+                            {% endif %}
+                        </span></div>
+                        <div class="detail-row"><span class="label">Payment Terms</span><span class="value">{{ quote.payment_terms|default:"—" }}</span></div>
+                        <div class="detail-row"><span class="label">Delivery Terms</span><span class="value">{{ quote.delivery_terms|default:"—" }}</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header"><h2>Quote Lines</h2></div>
+            <div class="table-wrapper">
+                <table>
+                    <thead><tr><th>#</th><th>Part #</th><th>Description</th><th>Qty</th><th>CD</th><th>Cost</th><th>Sell</th><th>Line Total</th><th>Margin</th><th>Lead Time</th></tr></thead>
+                    <tbody>
+                        {% for line in lines %}
+                        <tr>
+                            <td style="color:#94a3b8;">{{ line.line_number }}</td>
+                            <td style="font-weight:600;font-family:monospace;">{{ line.part_number_raw }}</td>
+                            <td>{{ line.description|default:"—" }}</td>
+                            <td>{{ line.quantity }}</td>
+                            <td>{{ line.condition|default:"—" }}</td>
+                            <td>{% if line.cost %}${{ line.cost|floatformat:4 }}{% else %}—{% endif %}</td>
+                            <td>{% if line.sell_price %}<strong>${{ line.sell_price|floatformat:4 }}</strong>{% else %}—{% endif %}</td>
+                            <td>${{ line.line_total|floatformat:2 }}</td>
+                            <td>{% if line.margin_percent %}
+                                <span class="margin-badge {% if line.margin_percent >= 20 %}margin-good{% elif line.margin_percent >= 10 %}margin-warn{% else %}margin-bad{% endif %}">{{ line.margin_percent }}%</span>
+                            {% else %}—{% endif %}</td>
+                            <td>{{ line.lead_time|default:"—" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="10" style="text-align:center;padding:24px;color:#94a3b8;">No lines</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="card">
+            <div class="card-header"><h2>Actions</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:8px;">
+                <a href="/sales-orders/create/?quote={{ quote.pk }}" class="btn btn-primary"><i class="fas fa-shopping-cart"></i> Create Sales Order</a>
+                <a href="/quotes/{{ quote.pk }}/edit/" class="btn btn-secondary"><i class="fas fa-edit"></i> Edit Quote</a>
+                <button class="btn btn-secondary" onclick="window.print()"><i class="fas fa-print"></i> Print / PDF</button>
+            </div>
+        </div>
+        {% if quote.header_notes or quote.footer_notes %}
+        <div class="card">
+            <div class="card-header"><h2>Notes</h2></div>
+            <div class="card-body" style="font-size:13px;">
+                {% if quote.header_notes %}<p><strong>Header:</strong> {{ quote.header_notes }}</p>{% endif %}
+                {% if quote.footer_notes %}<p style="margin-top:8px;"><strong>Footer:</strong> {{ quote.footer_notes }}</p>{% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

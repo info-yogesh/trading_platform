@@ -1,0 +1,118 @@
+{% extends "base/base.html" %}
+{% block title %}Dashboard — TradePlatform{% endblock %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block topbar_actions %}
+<form method="get" style="display:flex;align-items:center;gap:8px;">
+    <select name="range" class="form-control" onchange="this.form.submit()" style="width:auto;">
+        <option value="yesterday" {% if date_filter == 'yesterday' %}selected{% endif %}>Yesterday</option>
+        <option value="7days" {% if date_filter == '7days' %}selected{% endif %}>Last 7 Days</option>
+        <option value="custom" {% if date_filter == 'custom' %}selected{% endif %}>Custom</option>
+    </select>
+    {% if date_filter == 'custom' %}
+    <input type="date" name="start" value="{{ start_date }}" class="form-control" style="width:140px;">
+    <input type="date" name="end" value="{{ end_date }}" class="form-control" style="width:140px;">
+    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    {% endif %}
+</form>
+{% endblock %}
+
+{% block content %}
+<div class="kpi-grid">
+    <div class="kpi-card accent">
+        <div class="kpi-label">RFQs Received</div>
+        <div class="kpi-value">{{ rfq_count }}</div>
+        <div class="kpi-sub">Email: {{ rfq_email }} &bull; Manual: {{ rfq_manual }}</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Open RFQs</div>
+        <div class="kpi-value">{{ open_rfqs }}</div>
+        <div class="kpi-sub">Awaiting response</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Quoted RFQs</div>
+        <div class="kpi-value">{{ quoted_rfqs }}</div>
+        <div class="kpi-sub">Partial or full</div>
+    </div>
+    <div class="kpi-card success">
+        <div class="kpi-label">Conversion Rate</div>
+        <div class="kpi-value">{{ conversion_rate }}%</div>
+        <div class="kpi-sub">RFQ → Won</div>
+    </div>
+    <div class="kpi-card accent">
+        <div class="kpi-label">Sales Value</div>
+        <div class="kpi-value">${{ total_sales_value|floatformat:0 }}</div>
+        <div class="kpi-sub">Period total</div>
+    </div>
+    <div class="kpi-card success">
+        <div class="kpi-label">Gross Profit</div>
+        <div class="kpi-value">${{ total_profit|floatformat:0 }}</div>
+        <div class="kpi-sub">Sell - (Cost + Charges)</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Purchase Value</div>
+        <div class="kpi-value">${{ total_purchase_value|floatformat:0 }}</div>
+        <div class="kpi-sub">Period POs</div>
+    </div>
+    <div class="kpi-card">
+        <div class="kpi-label">Inventory Value</div>
+        <div class="kpi-value">${{ inventory_value|floatformat:0 }}</div>
+        <div class="kpi-sub">Own stock at cost</div>
+    </div>
+    <div class="kpi-card warning">
+        <div class="kpi-label">Aging RFQs</div>
+        <div class="kpi-value">{{ aging_rfqs }}</div>
+        <div class="kpi-sub">Open &gt; 7 days</div>
+    </div>
+    <div class="kpi-card warning">
+        <div class="kpi-label">Aging POs</div>
+        <div class="kpi-value">{{ aging_pos }}</div>
+        <div class="kpi-sub">Undelivered &gt; 14 days</div>
+    </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:4px;">
+    <!-- Quick Actions -->
+    <div class="card">
+        <div class="card-header"><h2>Quick Actions</h2></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <a href="/rfq/create/" class="btn btn-primary"><i class="fas fa-plus"></i> New RFQ</a>
+            <a href="/quotes/create/" class="btn btn-secondary"><i class="fas fa-file-invoice-dollar"></i> New Quote</a>
+            <a href="/sales-orders/create/" class="btn btn-secondary"><i class="fas fa-shopping-cart"></i> New SO</a>
+            <a href="/purchase-orders/create/" class="btn btn-secondary"><i class="fas fa-truck"></i> New PO</a>
+            <a href="/email/parse/" class="btn btn-secondary"><i class="fas fa-envelope"></i> Parse Email</a>
+            <a href="/inventory/create/" class="btn btn-secondary"><i class="fas fa-warehouse"></i> Add Inventory</a>
+        </div>
+    </div>
+
+    <!-- Workflow Pipeline -->
+    <div class="card">
+        <div class="card-header"><h2>Workflow Pipeline</h2></div>
+        <div class="card-body">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;">
+                <div style="text-align:center;padding:8px 12px;background:#eff6ff;border-radius:6px;border:1px solid #bfdbfe;">
+                    <div style="font-weight:700;font-size:18px;color:#3b82f6;">{{ rfq_count }}</div>
+                    <div style="color:#64748b;">RFQs</div>
+                </div>
+                <i class="fas fa-arrow-right" style="color:#cbd5e1;"></i>
+                <div style="text-align:center;padding:8px 12px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;">
+                    <div style="font-weight:700;font-size:18px;color:#10b981;">{{ quoted_rfqs }}</div>
+                    <div style="color:#64748b;">Quoted</div>
+                </div>
+                <i class="fas fa-arrow-right" style="color:#cbd5e1;"></i>
+                <div style="text-align:center;padding:8px 12px;background:#ecfdf5;border-radius:6px;border:1px solid #a7f3d0;">
+                    <div style="font-weight:700;font-size:18px;color:#10b981;">{{ conversion_rate }}%</div>
+                    <div style="color:#64748b;">Won</div>
+                </div>
+            </div>
+            <div style="margin-top:16px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                <div style="font-size:11px;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Profit Formula</div>
+                <div style="font-size:13px;color:#1e293b;">
+                    <span style="color:#10b981;font-weight:600;">Profit</span> = Sell Price − (Cost + Allocated Charges)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
