@@ -1,0 +1,150 @@
+{% extends "base/base.html" %}
+{% block title %}{{ vrfq.rfq_number }} — Vendor RFQ{% endblock %}
+{% block page_title %}{{ vrfq.rfq_number }}{% endblock %}
+
+{% block topbar_actions %}
+<a href="/rfq/{{ vrfq.inquiry.pk }}/" class="btn btn-secondary btn-sm">
+    <i class="fas fa-arrow-left"></i> Back to Inquiry
+</a>
+{% if vrfq.status == 'draft' %}
+<a href="/vendor-rfq/{{ vrfq.pk }}/send/" class="btn btn-primary btn-sm">
+    <i class="fas fa-paper-plane"></i> Review &amp; Send
+</a>
+{% endif %}
+{% if vrfq.status == 'sent' or vrfq.status == 'quoted' %}
+<a href="/vendor-rfq/{{ vrfq.pk }}/quote/" class="btn btn-primary btn-sm">
+    <i class="fas fa-edit"></i> Enter Quote
+</a>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- Status Header -->
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;">
+    <div class="card" style="padding:16px;">
+        <div style="font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:4px;">Vendor</div>
+        <div style="font-weight:700;font-size:15px;">{{ vrfq.vendor.name }}</div>
+        {% if vrfq.vendor.email %}
+        <div style="font-size:12px;color:#64748b;margin-top:2px;">{{ vrfq.vendor.email }}</div>
+        {% endif %}
+    </div>
+    <div class="card" style="padding:16px;">
+        <div style="font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:4px;">Status</div>
+        <span style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700;
+            {% if vrfq.status == 'draft' %}background:#f1f5f9;color:#475569;
+            {% elif vrfq.status == 'sent' %}background:#dbeafe;color:#1d4ed8;
+            {% elif vrfq.status == 'quoted' %}background:#d1fae5;color:#065f46;
+            {% elif vrfq.status == 'won' %}background:#dcfce7;color:#166534;
+            {% elif vrfq.status == 'lost' %}background:#fee2e2;color:#991b1b;
+            {% endif %}">
+            {{ vrfq.get_status_display }}
+        </span>
+    </div>
+    <div class="card" style="padding:16px;">
+        <div style="font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:4px;">Lines</div>
+        <div style="font-weight:700;font-size:20px;">{{ vrfq.total_lines }}</div>
+        <div style="font-size:12px;color:#64748b;">{{ vrfq.quoted_lines }} quoted</div>
+    </div>
+    <div class="card" style="padding:16px;">
+        <div style="font-size:11px;text-transform:uppercase;color:#94a3b8;letter-spacing:.06em;margin-bottom:4px;">Sent At</div>
+        {% if vrfq.sent_at %}
+        <div style="font-weight:600;font-size:13px;">{{ vrfq.sent_at|date:"d M Y" }}</div>
+        <div style="font-size:12px;color:#64748b;">{{ vrfq.sent_at|date:"H:i" }}</div>
+        {% else %}
+        <div style="color:#94a3b8;font-size:13px;">Not sent yet</div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Line Items + Quotes -->
+<div class="card">
+    <div class="card-header">
+        <h2>Line Items &amp; Quotes</h2>
+        {% if vrfq.status == 'sent' or vrfq.status == 'quoted' %}
+        <a href="/vendor-rfq/{{ vrfq.pk }}/quote/" class="btn btn-primary btn-sm">
+            <i class="fas fa-edit"></i> Enter / Edit Quote
+        </a>
+        {% endif %}
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Part Number</th>
+                    <th>Qty Requested</th>
+                    <th>Condition</th>
+                    <th>Target Price</th>
+                    <th style="background:#f0fdf4;border-left:2px solid #bbf7d0;">Unit Price</th>
+                    <th style="background:#f0fdf4;">Qty Available</th>
+                    <th style="background:#f0fdf4;">Lead Time</th>
+                    <th style="background:#f0fdf4;">Cert</th>
+                    <th style="background:#f0fdf4;">Source</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for line in vrfq.lines.all %}
+                {% with quote=line.best_quote %}
+                <tr style="{% if quote %}background:#fafffe;{% endif %}">
+                    <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
+                    <td style="font-family:monospace;font-weight:700;font-size:13px;">
+                        {{ line.part_number }}
+                    </td>
+                    <td>{{ line.quantity }}</td>
+                    <td>{{ line.condition|default:"—" }}</td>
+                    <td style="font-size:12px;color:#64748b;">
+                        {% if line.target_price %}${{ line.target_price }}{% else %}—{% endif %}
+                    </td>
+
+                    <!-- Quote columns -->
+                    {% if quote %}
+                    <td style="background:#f0fdf4;border-left:2px solid #bbf7d0;font-weight:700;color:#065f46;">
+                        ${{ quote.unit_price }}
+                    </td>
+                    <td style="background:#f0fdf4;">{{ quote.quantity_available }}</td>
+                    <td style="background:#f0fdf4;">
+                        {% if quote.lead_time_days %}{{ quote.lead_time_days }}d{% else %}—{% endif %}
+                    </td>
+                    <td style="background:#f0fdf4;font-size:11px;">
+                        {{ quote.certification|default:"—" }}
+                    </td>
+                    <td style="background:#f0fdf4;">
+                        <span style="font-size:10px;padding:2px 6px;border-radius:4px;
+                            {% if quote.source == 'email' %}background:#dbeafe;color:#1d4ed8;
+                            {% else %}background:#f1f5f9;color:#64748b;{% endif %}">
+                            {{ quote.get_source_display }}
+                        </span>
+                    </td>
+                    {% else %}
+                    <td colspan="5" style="background:#fffbeb;border-left:2px solid #fde68a;
+                                           text-align:center;font-size:12px;color:#92400e;">
+                        <i class="fas fa-clock"></i> Awaiting quote
+                    </td>
+                    {% endif %}
+                </tr>
+                {% if quote and quote.notes %}
+                <tr>
+                    <td colspan="10" style="padding:4px 16px;font-size:11px;color:#64748b;
+                                             background:#f8fafc;border-bottom:1px solid #f1f5f9;">
+                        <i class="fas fa-comment-alt" style="color:#94a3b8;"></i>
+                        <em>{{ quote.notes }}</em>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endwith %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Notes -->
+{% if vrfq.notes %}
+<div class="card" style="margin-top:16px;">
+    <div class="card-header"><h2>Notes</h2></div>
+    <div class="card-body" style="font-size:13px;color:#475569;white-space:pre-wrap;">{{ vrfq.notes }}</div>
+</div>
+{% endif %}
+
+{% endblock %}

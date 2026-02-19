@@ -19,4 +19,5 @@ urlpatterns = [
     path('purchase-orders/', include('apps.purchase_orders.urls')),
     path('receiving/', include('apps.receiving.urls')),
     path('email/', include('apps.email_integration.urls')),
+    path('vendor-rfq/', include('apps.vendor_rfq.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

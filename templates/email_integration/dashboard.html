@@ -64,6 +64,71 @@
 </div>
 {% endif %}
 
+{% if pending_vendor_quotes %}
+<div class="card" style="margin-bottom:20px;border:2px solid #bbf7d0;">
+    <div class="card-header" style="background:#f0fdf4;">
+        <h2>
+            <i class="fas fa-reply" style="color:#10b981;margin-right:6px;"></i>
+            Vendor Quote Replies
+            <span style="background:#10b981;color:#fff;font-size:11px;
+                         padding:2px 8px;border-radius:10px;margin-left:8px;">
+                {{ pending_vendor_quotes|length }}
+            </span>
+        </h2>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>Vendor</th>
+                    <th>VRFQ</th>
+                    <th>Subject</th>
+                    <th>Lines Parsed</th>
+                    <th>Received</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pq in pending_vendor_quotes %}
+                <tr>
+                    <td style="font-weight:600;">{{ pq.vendor_rfq.vendor.name }}</td>
+                    <td style="font-family:monospace;font-size:12px;">
+                        <a href="/vendor-rfq/{{ pq.vendor_rfq.pk }}/" style="color:#3b82f6;">
+                            {{ pq.vendor_rfq.rfq_number }}
+                        </a>
+                    </td>
+                    <td style="font-size:13px;">{{ pq.email_log.subject|truncatechars:50 }}</td>
+                    <td>
+                        <span class="badge badge-approved">
+                            {{ pq.raw_parsed.lines|length }} lines
+                        </span>
+                    </td>
+                    <td style="font-size:12px;color:#64748b;">
+                        {{ pq.email_log.received_at|date:"d M H:i" }}
+                    </td>
+                    <td>
+        {% if email.parsedvendorquote %}
+            <!-- Vendor quote reply — go straight to vendor verify -->
+            <a href="/vendor-rfq/verify-quote/{{ email.parsedvendorquote.pk }}/"
+               class="btn btn-primary btn-sm">
+                <i class="fas fa-eye"></i> Verify Quote
+            </a>
+        {% else %}
+            <!-- Customer inquiry -->
+            <a href="/email/verify/{{ email.id }}/"
+               class="btn btn-primary btn-sm">
+                <i class="fas fa-eye"></i> Review
+            </a>
+        {% endif %}
+    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
 <!-- Accounts + Email Log (existing layout) -->
 <div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;align-items:start;">
 

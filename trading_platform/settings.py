@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     'apps.purchase_orders',
     'apps.receiving',
     'apps.email_integration',
+    'apps.vendor_rfq',
 ]
 
 MIDDLEWARE = [

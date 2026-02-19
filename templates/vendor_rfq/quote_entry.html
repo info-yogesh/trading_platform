@@ -1,0 +1,141 @@
+{% extends "base/base.html" %}
+{% block title %}Enter Quote — {{ vrfq.rfq_number }}{% endblock %}
+{% block page_title %}Enter Vendor Quote{% endblock %}
+
+{% block topbar_actions %}
+<a href="/vendor-rfq/{{ vrfq.pk }}/" class="btn btn-secondary btn-sm">
+    <i class="fas fa-arrow-left"></i> Back to {{ vrfq.rfq_number }}
+</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header bar -->
+<div style="background:#1e293b;border-radius:10px;padding:14px 20px;margin-bottom:20px;
+            display:flex;align-items:center;gap:20px;color:#e2e8f0;flex-wrap:wrap;">
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Vendor RFQ</div>
+        <div style="font-weight:700;font-family:monospace;color:#60a5fa;">{{ vrfq.rfq_number }}</div>
+    </div>
+    <div style="width:1px;height:28px;background:#334155;"></div>
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Vendor</div>
+        <div style="font-weight:600;font-size:13px;">{{ vrfq.vendor.name }}</div>
+    </div>
+    <div style="width:1px;height:28px;background:#334155;"></div>
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Lines</div>
+        <div style="font-weight:600;">{{ lines|length }}</div>
+    </div>
+    <div style="margin-left:auto;font-size:12px;color:#94a3b8;">
+        <i class="fas fa-info-circle"></i>
+        Fill price + qty for lines the vendor can supply. Leave blank to skip a line.
+    </div>
+</div>
+
+<form method="post">
+    {% csrf_token %}
+    <div class="card">
+        <div class="card-header">
+            <h2>Quote Entry</h2>
+            <span style="font-size:12px;color:#64748b;">
+                All prices in USD · Leave price blank to skip a line
+            </span>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width:30px;">#</th>
+                        <th>Part Number</th>
+                        <th>Qty Requested</th>
+                        <th style="background:#fafffe;border-left:2px solid #bbf7d0;">
+                            Unit Price ($) *
+                        </th>
+                        <th style="background:#fafffe;">Qty Available *</th>
+                        <th style="background:#fafffe;">Lead Time (days)</th>
+                        <th style="background:#fafffe;">Condition</th>
+                        <th style="background:#fafffe;">Certification</th>
+                        <th style="background:#fafffe;">Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for line in lines %}
+                    {% with existing=line.quotes.first %}
+                    <tr style="{% if existing %}background:#fafffe;{% endif %}border-bottom:1px solid #f1f5f9;">
+                        <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
+                        <td>
+                            <div style="font-family:monospace;font-weight:700;font-size:13px;">
+                                {{ line.part_number }}
+                            </div>
+                            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+                                CD: {{ line.condition|default:"Any" }}
+                            </div>
+                        </td>
+                        <td style="font-weight:600;">{{ line.quantity }}</td>
+
+                        <!-- Quote input fields -->
+                        <td style="background:#fafffe;border-left:2px solid #bbf7d0;padding:6px 8px;">
+                            <div style="display:flex;align-items:center;gap:4px;">
+                                <span style="color:#64748b;font-size:12px;">$</span>
+                                <input type="number" name="price_{{ line.pk }}"
+                                       value="{% if existing %}{{ existing.unit_price }}{% endif %}"
+                                       step="0.0001" min="0" placeholder="0.0000"
+                                       style="width:100px;border:1px solid #e2e8f0;border-radius:5px;
+                                              padding:5px 8px;font-size:13px;font-weight:600;
+                                              color:#065f46;">
+                            </div>
+                        </td>
+                        <td style="background:#fafffe;padding:6px 8px;">
+                            <input type="number" name="qty_{{ line.pk }}"
+                                   value="{% if existing %}{{ existing.quantity_available }}{% endif %}"
+                                   min="0" placeholder="0"
+                                   style="width:80px;border:1px solid #e2e8f0;border-radius:5px;
+                                          padding:5px 8px;font-size:13px;">
+                        </td>
+                        <td style="background:#fafffe;padding:6px 8px;">
+                            <input type="number" name="lead_{{ line.pk }}"
+                                   value="{% if existing %}{{ existing.lead_time_days }}{% endif %}"
+                                   min="0" placeholder="e.g. 14"
+                                   style="width:80px;border:1px solid #e2e8f0;border-radius:5px;
+                                          padding:5px 8px;font-size:13px;">
+                        </td>
+                        <td style="background:#fafffe;padding:6px 8px;">
+                            <input type="text" name="condition_{{ line.pk }}"
+                                   value="{% if existing %}{{ existing.condition }}{% endif %}"
+                                   placeholder="New / Used / NS"
+                                   style="width:100px;border:1px solid #e2e8f0;border-radius:5px;
+                                          padding:5px 8px;font-size:12px;">
+                        </td>
+                        <td style="background:#fafffe;padding:6px 8px;">
+                            <input type="text" name="cert_{{ line.pk }}"
+                                   value="{% if existing %}{{ existing.certification }}{% endif %}"
+                                   placeholder="AS9120, CoC..."
+                                   style="width:120px;border:1px solid #e2e8f0;border-radius:5px;
+                                          padding:5px 8px;font-size:12px;">
+                        </td>
+                        <td style="background:#fafffe;padding:6px 8px;">
+                            <input type="text" name="notes_{{ line.pk }}"
+                                   value="{% if existing %}{{ existing.notes }}{% endif %}"
+                                   placeholder="Optional notes..."
+                                   style="width:160px;border:1px solid #e2e8f0;border-radius:5px;
+                                          padding:5px 8px;font-size:12px;">
+                        </td>
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="padding:16px;border-top:1px solid #e2e8f0;
+                    display:flex;gap:10px;justify-content:flex-end;">
+            <a href="/vendor-rfq/{{ vrfq.pk }}/" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-save"></i> Save Quote
+            </button>
+        </div>
+    </div>
+</form>
+{% endblock %}

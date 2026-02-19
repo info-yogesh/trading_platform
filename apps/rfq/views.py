@@ -28,7 +28,47 @@ def rfq_list(request):
 
 @login_required
 def rfq_create(request):
+    import json
     customers = Company.objects.filter(company_type__in=['customer', 'both'], is_active=True)
+
+    # Read prefill from session
+    prefill = {}
+    prefill_customer = None
+    prefill_raw = request.session.pop('rfq_prefill', None)
+    if prefill_raw:
+        try:
+            prefill = json.loads(prefill_raw)
+        except (json.JSONDecodeError, TypeError):
+            prefill = {}
+
+    # ✅ Resolve or create the customer from prefill
+    if prefill.get('customer_name'):
+        customer_name = prefill['customer_name'].strip()
+
+        # Try to find existing company by name (case-insensitive)
+        prefill_customer = Company.objects.filter(
+            name__iexact=customer_name,
+            company_type__in=['customer', 'both'],
+        ).first()
+
+        if not prefill_customer:
+            # Auto-create with minimal info — user can enrich later
+            prefill_customer = Company.objects.create(
+                name=customer_name,
+                company_type='customer',
+                is_active=True,
+            )
+            messages.info(
+                request,
+                f'New customer "{customer_name}" was automatically created from the email. '
+                f'Please review and complete their profile.'
+            )
+
+        # Make sure it appears in the dropdown queryset
+        customers = Company.objects.filter(
+            company_type__in=['customer', 'both'], is_active=True
+        )
+
     if request.method == 'POST':
         rfq = RFQ(
             customer_id=request.POST['customer'],
@@ -41,14 +81,13 @@ def rfq_create(request):
         )
         rfq.save()
 
-        # Parse lines
-        pn_list = request.POST.getlist('line_pn[]')
+        pn_list   = request.POST.getlist('line_pn[]')
         desc_list = request.POST.getlist('line_desc[]')
-        qty_list = request.POST.getlist('line_qty[]')
-        cd_list = request.POST.getlist('line_cd[]')
+        qty_list  = request.POST.getlist('line_qty[]')
+        cd_list   = request.POST.getlist('line_cd[]')
 
         for i, pn in enumerate(pn_list):
-            if not pn:
+            if not pn.strip():
                 continue
             part = Part.objects.filter(part_number=pn).first()
             RFQLine.objects.create(
@@ -63,16 +102,45 @@ def rfq_create(request):
 
         messages.success(request, f'RFQ {rfq.rfq_number} created.')
         return redirect('rfq_detail', pk=rfq.pk)
-    return render(request, 'rfq/form.html', {'customers': customers, 'action': 'Create'})
 
+    return render(request, 'rfq/form.html', {
+        'customers': customers,
+        'action': 'Create',
+        'prefill': prefill,
+        'prefill_customer': prefill_customer,   # ✅ new
+        'prefill_customer_created': getattr(prefill_customer, '_just_created', False),  # ✅
+
+    })
 
 @login_required
 def rfq_detail(request, pk):
     rfq = get_object_or_404(RFQ, pk=pk)
     lines = rfq.lines.select_related('part').all()
     audit_logs = rfq.audit_logs.select_related('changed_by').all()[:20]
+
+    # Vendor RFQs for this inquiry
+    vendor_rfqs = rfq.vendor_rfqs.select_related(
+        'vendor', 'created_by'
+    ).prefetch_related('lines__quotes').all()
+
+    # Summary stats per vendor RFQ
+    vendor_rfq_stats = []
+    for vrfq in vendor_rfqs:
+        total   = vrfq.lines.count()
+        quoted  = vrfq.lines.filter(quotes__isnull=False).distinct().count()
+        vendor_rfq_stats.append({
+            'vrfq': vrfq,
+            'total_lines': total,
+            'quoted_lines': quoted,
+            'progress': int((quoted / total * 100)) if total else 0,
+        })
+
     return render(request, 'rfq/detail.html', {
-        'rfq': rfq, 'lines': lines, 'audit_logs': audit_logs,
+        'rfq': rfq,
+        'lines': lines,
+        'audit_logs': audit_logs,
+        'vendor_rfq_stats': vendor_rfq_stats,
+        'has_vendor_rfqs': vendor_rfqs.exists(),
     })
 
 

@@ -4,6 +4,18 @@
 {% block page_title %}{{ action }} RFQ{% endblock %}
 
 {% block content %}
+
+{% if prefill.lines %}
+<div style="margin-bottom:16px;padding:12px 16px;background:#eff6ff;border:1px solid #bfdbfe;
+            border-radius:8px;font-size:13px;color:#1d4ed8;display:flex;align-items:center;gap:10px;">
+    <i class="fas fa-magic"></i>
+    <div>
+        <strong>Pre-filled from email</strong> —
+        {{ prefill.lines|length }} line{{ prefill.lines|length|pluralize }} imported from
+        <em>{{ prefill.subject }}</em>. Review and select a customer before saving.
+    </div>
+</div>
+{% endif %}
 <form method="post" id="rfqForm">
     {% csrf_token %}
     <div style="display:grid;grid-template-columns:2fr 1fr;gap:20px;align-items:start;">
@@ -15,19 +27,36 @@
                 <div class="card-body">
                     <div class="form-grid form-grid-2">
                         <div class="form-group">
-                            <label>Customer *</label>
-                            <select name="customer" class="form-control" required>
-                                <option value="">Select Customer</option>
-                                {% for c in customers %}
-                                <option value="{{ c.pk }}" {% if rfq and rfq.customer_id == c.pk %}selected{% endif %}>{{ c.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
+    <label>Customer *</label>
+    <select name="customer" class="form-control" required>
+        <option value="">Select Customer</option>
+        {% for c in customers %}
+        <option value="{{ c.pk }}"
+            {% if rfq and rfq.customer_id == c.pk %}selected
+            {% elif prefill_customer and prefill_customer.pk == c.pk %}selected
+            {% endif %}>
+            {{ c.name }}
+        </option>
+        {% endfor %}
+    </select>
+
+    {% if prefill_customer %}
+    <div style="margin-top:6px;font-size:12px;color:#059669;">
+        <i class="fas fa-check-circle"></i>
+        {% if prefill_customer_created %}
+            New customer <strong>{{ prefill_customer.name }}</strong> created from email — please complete their profile in
+            <a href="/companies/{{ prefill_customer.pk }}/edit/" target="_blank">Companies</a>.
+        {% else %}
+            Matched existing customer <strong>{{ prefill_customer.name }}</strong>.
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
                         <div class="form-group">
                             <label>Source</label>
                             <select name="source" class="form-control">
-                                <option value="manual">Manual</option>
-                                <option value="email">Email</option>
+                                <option value="manual" {% if prefill.source != 'email_parsed' %}selected{% endif %}>Manual</option>
+                                <option value="email" {% if prefill.source == 'email_parsed' %}selected{% endif %}>Email</option>
                                 <option value="bulk_paste">Bulk Paste</option>
                             </select>
                         </div>
@@ -57,7 +86,7 @@
                         </div>
                         <div class="form-group">
                             <label>External Notes <small style="text-transform:none;font-weight:400;">(visible to customer)</small></label>
-                            <textarea name="external_notes" class="form-control">{% if rfq %}{{ rfq.external_notes }}{% endif %}</textarea>
+                            <textarea name="external_notes" class="form-control">{% if rfq %}{{ rfq.external_notes }}{% elif prefill.subject %}From email: {{ prefill.subject }}{% endif %}</textarea>
                         </div>
                     </div>
                 </div>
@@ -84,29 +113,43 @@
                                 <th style="width:40px;"></th>
                             </tr>
                         </thead>
-                        <tbody id="linesBody">
-                            {% if rfq %}
-                                {% for line in rfq.lines.all %}
-                                <tr>
-                                    <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
-                                    <td><input type="text" name="line_pn[]" value="{{ line.part_number_raw }}" class="pn-input" required></td>
-                                    <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
-                                    <td><input type="number" name="line_qty[]" value="{{ line.quantity }}" step="0.0001" min="0"></td>
-                                    <td><input type="text" name="line_cd[]" value="{{ line.condition_required }}"></td>
-                                    <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
-                                </tr>
-                                {% endfor %}
-                            {% else %}
-                                <tr>
-                                    <td style="color:#94a3b8;font-size:12px;">1</td>
-                                    <td><input type="text" name="line_pn[]" class="pn-input" required placeholder="Part #"></td>
-                                    <td><input type="text" name="line_desc[]" placeholder="Description"></td>
-                                    <td><input type="number" name="line_qty[]" step="0.0001" min="0" placeholder="0"></td>
-                                    <td><input type="text" name="line_cd[]" placeholder="New/Used..."></td>
-                                    <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
-                                </tr>
-                            {% endif %}
-                        </tbody>
+                        <!-- LINE ITEMS tbody: render prefill lines when coming from email -->
+<tbody id="linesBody">
+    {% if rfq %}
+        {% for line in rfq.lines.all %}
+        <tr>
+            <td style="color:#94a3b8;font-size:12px;">{{ line.line_number }}</td>
+            <td><input type="text" name="line_pn[]" value="{{ line.part_number_raw }}" class="pn-input" required></td>
+            <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
+            <td><input type="number" name="line_qty[]" value="{{ line.quantity }}" step="0.0001" min="0"></td>
+            <td><input type="text" name="line_cd[]" value="{{ line.condition_required }}"></td>
+            <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+        </tr>
+        {% endfor %}
+    {% elif prefill.lines %}
+        <!-- ✅ Pre-filled from email parser -->
+        {% for line in prefill.lines %}
+        <tr>
+            <td style="color:#94a3b8;font-size:12px;">{{ forloop.counter }}</td>
+            <td><input type="text" name="line_pn[]" value="{{ line.pn }}" class="pn-input" required></td>
+            <td><input type="text" name="line_desc[]" value="{{ line.description }}"></td>
+            <td><input type="number" name="line_qty[]" value="{{ line.qty }}" step="0.0001" min="0"></td>
+            <td><input type="text" name="line_cd[]" value="{{ line.cd }}"></td>
+            <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <!-- Default blank row -->
+        <tr>
+            <td style="color:#94a3b8;font-size:12px;">1</td>
+            <td><input type="text" name="line_pn[]" class="pn-input" required placeholder="Part #"></td>
+            <td><input type="text" name="line_desc[]" placeholder="Description"></td>
+            <td><input type="number" name="line_qty[]" step="0.0001" min="0" placeholder="0"></td>
+            <td><input type="text" name="line_cd[]" placeholder="New/Used..."></td>
+            <td><span class="del-row" onclick="delRow(this)"><i class="fas fa-times"></i></span></td>
+        </tr>
+    {% endif %}
+</tbody>
                     </table>
                 </div>
                 <div style="padding:10px 16px;display:flex;gap:8px;border-top:1px solid #f1f5f9;">

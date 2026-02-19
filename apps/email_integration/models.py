@@ -59,7 +59,7 @@ class EmailLog(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='received')
     has_attachments = models.BooleanField(default=False)
     parsed_rfq = models.ForeignKey('rfq.RFQ', on_delete=models.SET_NULL, null=True, blank=True)
-    gmail_message_id = models.CharField(max_length=200, blank=True, unique=True)  # dedup
+    gmail_message_id = models.CharField(max_length=200, blank=True)  # dedup
     received_at = models.DateTimeField()
     processed_at = models.DateTimeField(null=True, blank=True)
     relevance_score = models.FloatField(null=True, blank=True)   # ← new

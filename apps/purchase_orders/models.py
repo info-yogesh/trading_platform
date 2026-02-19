@@ -20,7 +20,7 @@ class PurchaseOrder(models.Model):
         ('GBP', 'GBP'),
     ]
 
-    po_number = models.CharField(max_length=50, unique=True, blank=True)
+    po_number = models.CharField(max_length=50, blank=True)
     vendor = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='purchase_orders')
     sales_order = models.ForeignKey(SalesOrder, on_delete=models.SET_NULL, null=True, blank=True, related_name='purchase_orders')
     status = models.CharField(max_length=30, choices=STATUS_CHOICES, default='draft')

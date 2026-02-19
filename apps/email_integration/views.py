@@ -8,39 +8,47 @@ from django.utils import timezone
 from .models import EmailAccount, EmailLog, ParsedEmailData
 from .gmail_service import fetch_new_emails_for_account
 from .parser import parse_email_with_ai
+from ..vendor_rfq.models import ParsedVendorQuote
 
 
 @login_required
 def email_dashboard(request):
-    accounts = EmailAccount.objects.filter(is_active=True)
-    pending_review = EmailLog.objects.filter(
-        status='parsed'
-    ).select_related('account', 'parsed_data')[:20]
-    recent_emails = EmailLog.objects.select_related('account').all()[:50]
+    accounts      = EmailAccount.objects.filter(is_active=True)
+    pending_review = EmailLog.objects.filter(status='parsed').select_related('parsed_data')[:20]
+    recent_emails  = EmailLog.objects.select_related('account').all()[:50]
+
+    # ✅ Vendor quotes waiting for verification
+    pending_vendor_quotes = ParsedVendorQuote.objects.filter(
+        is_confirmed=False
+    ).select_related('vendor_rfq__vendor', 'email_log')[:10]
+
     return render(request, 'email_integration/dashboard.html', {
-        'accounts': accounts,
-        'recent_emails': recent_emails,
-        'pending_review': pending_review,
-        'pending_count': pending_review.count(),
+        'accounts':              accounts,
+        'recent_emails':         recent_emails,
+        'pending_review':        pending_review,
+        'pending_count':         pending_review.count(),
+        'pending_vendor_quotes': pending_vendor_quotes,
     })
 
 
+# apps/email_integration/views.py
+
 @login_required
 def fetch_emails_now(request):
-    """Manual fetch triggered by the dashboard button."""
     if request.method != 'POST':
         return JsonResponse({'error': 'POST required'}, status=405)
 
     accounts = EmailAccount.objects.filter(is_active=True, use_oauth2=True)
     if not accounts.exists():
-        return JsonResponse({
-            'error': 'No Gmail accounts connected. Add one first.'
-        }, status=400)
+        return JsonResponse({'error': 'No Gmail accounts connected.'}, status=400)
 
-    total_fetched = 0
-    total_parsed = 0
+    total_fetched    = 0
+    total_parsed     = 0   # customer inquiries
+    total_vendor     = 0   # vendor quote replies
     total_irrelevant = 0
-    errors = []
+    errors           = []
+
+    from apps.email_integration.gmail_service import detect_vendor_rfq_reply
 
     for account in accounts:
         try:
@@ -48,17 +56,32 @@ def fetch_emails_now(request):
             total_fetched += len(new_logs)
 
             for log in new_logs:
-                # relevant, score, reason = is_email_relevant(log)
-                # log.relevance_score = score
-                # log.relevance_reason = reason
-                #
-                # if not relevant:
-                #     log.status = 'irrelevant'
-                #     log.save()
-                #     total_irrelevant += 1
-                #     continue
 
-                # Parse relevant emails
+                # ── Check if this is a vendor quote reply first ──
+                vrfq = detect_vendor_rfq_reply(log)
+                if vrfq:
+                    log.status = 'parsing'
+                    log.save()
+                    try:
+                        _parse_and_store_vendor_quote(log, vrfq)
+                        total_vendor += 1
+                    except Exception as e:
+                        log.status = 'failed'
+                        log.save()
+                        errors.append(f"Vendor quote parse error ({log.subject[:30]}): {str(e)}")
+                    continue
+
+                # ── Otherwise treat as customer inquiry ──
+                relevant, score, reason = is_email_relevant(log)
+                log.relevance_score = score
+                log.relevance_reason = reason
+
+                if not relevant:
+                    log.status = 'irrelevant'
+                    log.save()
+                    total_irrelevant += 1
+                    continue
+
                 log.status = 'parsing'
                 log.save()
                 try:
@@ -82,19 +105,62 @@ def fetch_emails_now(request):
             errors.append(f"{account.email}: {str(e)}")
 
     return JsonResponse({
-        'fetched': total_fetched,
-        'parsed': total_parsed,
-        'irrelevant': total_irrelevant,
-        'errors': errors,
+        'fetched':     total_fetched,
+        'parsed':      total_parsed,
+        'vendor':      total_vendor,
+        'irrelevant':  total_irrelevant,
+        'errors':      errors,
     })
+
+
+def _parse_and_store_vendor_quote(email_log, vrfq):
+    """Parse vendor reply email and store as ParsedVendorQuote for user verification."""
+    from apps.email_integration.parser import parse_vendor_quote_email
+    from apps.vendor_rfq.models import ParsedVendorQuote
+
+    rfq_line_pns = list(vrfq.lines.values_list('part_number', flat=True))
+    result = parse_vendor_quote_email(
+        subject=email_log.subject,
+        body_text=email_log.body_text,
+        rfq_lines=rfq_line_pns,
+    )
+
+    ParsedVendorQuote.objects.update_or_create(
+        email_log=email_log,
+        defaults={
+            'vendor_rfq':   vrfq,
+            'raw_parsed':   result,
+            'is_confirmed': False,
+        }
+    )
+
+    # Link reply email to VendorRFQ
+    vrfq.reply_email = email_log
+    vrfq.save(update_fields=['reply_email'])
+
+    email_log.status = 'parsed'
+    email_log.save()
 
 
 @login_required
 def email_verify(request, email_log_id):
-    """User reviews and confirms AI-parsed lines before creating RFQ."""
     import json
     email_log = get_object_or_404(EmailLog, id=email_log_id)
-    parsed = get_object_or_404(ParsedEmailData, email_log=email_log)
+
+    # ✅ If this is a vendor quote reply, redirect to the correct verify page
+    if hasattr(email_log, 'parsedvendorquote'):
+        pq = email_log.parsedvendorquote
+        return redirect('verify_vendor_quote', parsed_quote_id=pq.pk)
+
+    # Ensure correct state for customer inquiries
+    if email_log.status != 'parsed':
+        messages.warning(request, "Email must be parsed before verification.")
+        return redirect('email_dashboard')
+
+    parsed = getattr(email_log, 'parsed_data', None)
+    if not parsed:
+        messages.error(request, "Parsed data not found for this email.")
+        return redirect('email_dashboard')
 
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -103,6 +169,7 @@ def email_verify(request, email_log_id):
         if action == 'confirm':
             lines = json.loads(lines_json)
             original = parsed.raw_parsed.get('lines', [])
+
             parsed.confirmed_lines = lines
             parsed.is_confirmed = True
             parsed.confirmed_by = request.user
@@ -113,11 +180,19 @@ def email_verify(request, email_log_id):
             email_log.status = 'confirmed'
             email_log.save()
 
+            customer_name = parsed.raw_parsed.get('customer_name', '') or ''
+            if not customer_name and email_log.from_address:
+                import re
+                match = re.match(r'^([^<]+)<', email_log.from_address)
+                if match:
+                    customer_name = match.group(1).strip()
+
             request.session['rfq_prefill'] = json.dumps({
                 'lines': lines,
                 'source': 'email_parsed',
                 'subject': email_log.subject,
                 'from': email_log.from_address,
+                'customer_name': customer_name,
             })
             messages.success(request, 'Email confirmed — pre-filling RFQ.')
             return redirect('/rfq/create/')

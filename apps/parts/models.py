@@ -14,7 +14,7 @@ class Part(models.Model):
         ('archived', 'Archived'),
     ]
 
-    part_number = models.CharField(max_length=100, unique=True)
+    part_number = models.CharField(max_length=100)
     manufacturer = models.CharField(max_length=200, blank=True)
     manufacturer_code = models.CharField(max_length=100, blank=True)
     description = models.TextField(blank=True)
