@@ -1,13 +1,16 @@
 from django.contrib import admin
 from .models import PurchaseOrder, PurchaseOrderLine, AdditionalCharge
 
+
 class POLineInline(admin.TabularInline):
     model = PurchaseOrderLine
     extra = 1
 
+
 class ChargeInline(admin.TabularInline):
     model = AdditionalCharge
     extra = 1
+
 
 @admin.register(PurchaseOrder)
 class PurchaseOrderAdmin(admin.ModelAdmin):

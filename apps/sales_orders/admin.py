@@ -1,9 +1,11 @@
 from django.contrib import admin
 from .models import SalesOrder, SalesOrderLine
 
+
 class SOLineInline(admin.TabularInline):
     model = SalesOrderLine
     extra = 1
+
 
 @admin.register(SalesOrder)
 class SalesOrderAdmin(admin.ModelAdmin):

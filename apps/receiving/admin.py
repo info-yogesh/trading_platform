@@ -1,9 +1,11 @@
 from django.contrib import admin
 from .models import GoodsReceiptNote, GRNLine
 
+
 class GRNLineInline(admin.TabularInline):
     model = GRNLine
     extra = 1
+
 
 @admin.register(GoodsReceiptNote)
 class GRNAdmin(admin.ModelAdmin):

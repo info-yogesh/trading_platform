@@ -63,10 +63,8 @@ def _extract_text(payload):
     return ''
 
 
-# apps/email_integration/gmail_service.py
-
 def fetch_new_emails_for_account(account):
-    creds   = get_credentials_for_account(account)
+    creds = get_credentials_for_account(account)
     service = build('gmail', 'v1', credentials=creds)
 
     results = service.users().messages().list(
@@ -105,7 +103,7 @@ def detect_vendor_rfq_reply(email_log):
     # Strategy 1: subject contains our VRFQ number
     import re
     subject = email_log.subject or ''
-    body    = email_log.body_text or ''
+    body = email_log.body_text or ''
     combined = f"{subject} {body}"
 
     match = re.search(r'VRFQ-\d+', combined, re.IGNORECASE)

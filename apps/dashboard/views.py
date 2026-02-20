@@ -4,6 +4,7 @@ from django.utils import timezone
 from datetime import timedelta, date
 from django.db.models import Sum, Count, Q
 
+
 @login_required
 def dashboard(request):
     today = date.today()

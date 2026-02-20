@@ -7,31 +7,31 @@ from django.http import JsonResponse
 from django.utils import timezone
 from .models import EmailAccount, EmailLog, ParsedEmailData
 from .gmail_service import fetch_new_emails_for_account
-from .parser import parse_email_with_ai
+from .parser import parse_email_with_ai, is_email_relevant
 from ..vendor_rfq.models import ParsedVendorQuote
 
 
 @login_required
 def email_dashboard(request):
-    accounts      = EmailAccount.objects.filter(is_active=True)
+    accounts = EmailAccount.objects.filter(is_active=True)
     pending_review = EmailLog.objects.filter(status='parsed').select_related('parsed_data')[:20]
-    recent_emails  = EmailLog.objects.select_related('account').all()[:50]
+    recent_emails = EmailLog.objects.select_related('account').all()[:50]
 
     # ✅ Vendor quotes waiting for verification
     pending_vendor_quotes = ParsedVendorQuote.objects.filter(
         is_confirmed=False
     ).select_related('vendor_rfq__vendor', 'email_log')[:10]
 
-    return render(request, 'email_integration/dashboard.html', {
-        'accounts':              accounts,
-        'recent_emails':         recent_emails,
-        'pending_review':        pending_review,
-        'pending_count':         pending_review.count(),
+    context = {
+        'accounts': accounts,
+        'recent_emails': recent_emails,
+        'pending_review': pending_review,
+        'pending_count': pending_review.count(),
         'pending_vendor_quotes': pending_vendor_quotes,
-    })
+    }
 
+    return render(request, 'email_integration/dashboard.html', context)
 
-# apps/email_integration/views.py
 
 @login_required
 def fetch_emails_now(request):
@@ -42,11 +42,11 @@ def fetch_emails_now(request):
     if not accounts.exists():
         return JsonResponse({'error': 'No Gmail accounts connected.'}, status=400)
 
-    total_fetched    = 0
-    total_parsed     = 0   # customer inquiries
-    total_vendor     = 0   # vendor quote replies
+    total_fetched = 0
+    total_parsed = 0   # customer inquiries
+    total_vendor = 0   # vendor quote replies
     total_irrelevant = 0
-    errors           = []
+    errors = []
 
     from apps.email_integration.gmail_service import detect_vendor_rfq_reply
 
@@ -104,13 +104,14 @@ def fetch_emails_now(request):
         except Exception as e:
             errors.append(f"{account.email}: {str(e)}")
 
-    return JsonResponse({
-        'fetched':     total_fetched,
-        'parsed':      total_parsed,
-        'vendor':      total_vendor,
-        'irrelevant':  total_irrelevant,
-        'errors':      errors,
-    })
+    response = {
+        'fetched': total_fetched,
+        'parsed': total_parsed,
+        'vendor': total_vendor,
+        'irrelevant': total_irrelevant,
+        'errors': errors,
+    }
+    return JsonResponse(response)
 
 
 def _parse_and_store_vendor_quote(email_log, vrfq):

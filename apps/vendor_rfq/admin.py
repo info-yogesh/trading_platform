@@ -16,14 +16,14 @@ class VendorQuoteLineInline(admin.TabularInline):
 @admin.register(VendorRFQ)
 class VendorRFQAdmin(admin.ModelAdmin):
     list_display = ['rfq_number', 'inquiry', 'vendor', 'status', 'created_at']
-    list_filter  = ['status']
-    inlines      = [VendorRFQLineInline]
+    list_filter = ['status']
+    inlines = [VendorRFQLineInline]
 
 
 @admin.register(VendorRFQLine)
 class VendorRFQLineAdmin(admin.ModelAdmin):
     list_display = ['vendor_rfq', 'part_number', 'quantity', 'condition']
-    inlines      = [VendorQuoteLineInline]
+    inlines = [VendorQuoteLineInline]
 
 
 @admin.register(VendorSuggestionLog)
