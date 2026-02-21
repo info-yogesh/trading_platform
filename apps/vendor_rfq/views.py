@@ -1,3 +1,5 @@
+from django.db import transaction
+from django.db.models import Exists, OuterRef, Prefetch
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -18,7 +20,7 @@ from .suggestion_engine import get_vendor_suggestions, save_suggestion_log
 @login_required
 def send_to_vendors(request, inquiry_pk):
     inquiry = get_object_or_404(RFQ, pk=inquiry_pk)
-    lines   = inquiry.lines.all()
+    lines = inquiry.lines.all()
 
     suggested, all_vendors, reasons = get_vendor_suggestions(inquiry)
 
@@ -92,13 +94,13 @@ def send_to_vendors(request, inquiry_pk):
             existing_line_ids[vendor_id].add(vline.inquiry_line_id)
 
     return render(request, 'vendor_rfq/send_to_vendors.html', {
-        'inquiry':              inquiry,
-        'lines':                lines,
-        'all_vendors':          all_vendors,
+        'inquiry': inquiry,
+        'lines': lines,
+        'all_vendors': all_vendors,
         'suggested_line_ids': {k: list(v) for k, v in suggested_line_ids.items()},
         'existing_line_ids': {k: list(v) for k, v in existing_line_ids.items()},
-        'existing_vrfqs':       existing_vrfqs,
-        'reasons':              reasons,
+        'existing_vrfqs': existing_vrfqs,
+        'reasons': reasons,
     })
 
 
@@ -128,8 +130,8 @@ def vendor_rfq_send(request, pk):
         return redirect('vendor_rfq_detail', pk=pk)
 
     if request.method == 'POST':
-        subject     = request.POST.get('subject', '').strip()
-        body        = request.POST.get('body', '').strip()
+        subject = request.POST.get('subject', '').strip()
+        body = request.POST.get('body', '').strip()
         vendor_email = request.POST.get('vendor_email', '').strip()
 
         if not vendor_email:
@@ -168,8 +170,8 @@ def vendor_rfq_send(request, pk):
                 received_at=timezone.now(),
             )
 
-            vrfq.status       = VendorRFQ.STATUS_SENT
-            vrfq.sent_at      = timezone.now()
+            vrfq.status = VendorRFQ.STATUS_SENT
+            vrfq.sent_at = timezone.now()
             vrfq.outbound_email = email_log
             vrfq.save()
 
@@ -182,15 +184,15 @@ def vendor_rfq_send(request, pk):
 
     # GET — render the email draft preview
     default_subject = f"RFQ {vrfq.rfq_number} – Component Inquiry"
-    default_body    = _build_rfq_email_body(vrfq)
+    default_body = _build_rfq_email_body(vrfq)
     primary_contact = vrfq.vendor.contacts.filter(is_primary=True).first()
     vendor_email = primary_contact.email if primary_contact else ''
 
     return render(request, 'vendor_rfq/send_email.html', {
-        'vrfq':          vrfq,
+        'vrfq': vrfq,
         'default_subject': default_subject,
-        'default_body':    default_body,
-        'vendor_email':    vendor_email,
+        'default_body': default_body,
+        'vendor_email': vendor_email,
     })
 
 
@@ -227,7 +229,7 @@ Best regards"""
 
 @login_required
 def vendor_rfq_quote(request, pk):
-    vrfq  = get_object_or_404(VendorRFQ, pk=pk)
+    vrfq = get_object_or_404(VendorRFQ, pk=pk)
     lines = VendorRFQLine.objects.filter(
         vendor_rfq=vrfq
     ).prefetch_related('quotes').order_by('line_number')
@@ -241,11 +243,11 @@ def vendor_rfq_quote(request, pk):
 
         for line in lines:
             unit_price = request.POST.get(f'price_{line.pk}', '').strip()
-            qty_avail  = request.POST.get(f'qty_{line.pk}', '').strip()
-            lead_time  = request.POST.get(f'lead_{line.pk}', '').strip()
-            condition  = request.POST.get(f'condition_{line.pk}', '').strip()
-            cert       = request.POST.get(f'cert_{line.pk}', '').strip()
-            notes      = request.POST.get(f'notes_{line.pk}', '').strip()
+            qty_avail = request.POST.get(f'qty_{line.pk}', '').strip()
+            lead_time = request.POST.get(f'lead_{line.pk}', '').strip()
+            condition = request.POST.get(f'condition_{line.pk}', '').strip()
+            cert = request.POST.get(f'cert_{line.pk}', '').strip()
+            notes = request.POST.get(f'notes_{line.pk}', '').strip()
 
             # Skip if no price entered for this line
             if not unit_price:
@@ -255,14 +257,14 @@ def vendor_rfq_quote(request, pk):
             quote, _ = VendorQuoteLine.objects.update_or_create(
                 vendor_rfq_line=line,
                 defaults={
-                    'unit_price':         unit_price,
+                    'unit_price': unit_price,
                     'quantity_available': qty_avail or 0,
-                    'lead_time_days':     int(lead_time) if lead_time else None,
-                    'condition':          condition,
-                    'certification':      cert,
-                    'notes':              notes,
-                    'source':             VendorQuoteLine.SOURCE_MANUAL,
-                    'entered_by':         request.user,
+                    'lead_time_days': int(lead_time) if lead_time else None,
+                    'condition': condition,
+                    'certification': cert,
+                    'notes': notes,
+                    'source': VendorQuoteLine.SOURCE_MANUAL,
+                    'entered_by': request.user,
                 }
             )
             any_saved = True
@@ -281,7 +283,7 @@ def vendor_rfq_quote(request, pk):
         return redirect('vendor_rfq_detail', pk=pk)
 
     return render(request, 'vendor_rfq/quote_entry.html', {
-        'vrfq':  vrfq,
+        'vrfq': vrfq,
         'lines': lines,
     })
 
@@ -294,78 +296,141 @@ def vendor_rfq_quote(request, pk):
 def compare_quotes(request, inquiry_pk):
     inquiry = get_object_or_404(RFQ, pk=inquiry_pk)
 
-    # All vendor RFQs that have at least one quote
-    vendor_rfqs = VendorRFQ.objects.filter(
-        inquiry=inquiry,
-    ).exclude(
-        status=VendorRFQ.STATUS_DRAFT  # only exclude pure drafts with no quotes
-    ).select_related('vendor').prefetch_related('lines__quotes', 'lines__inquiry_line')
+    # Get only Vendor RFQs that have quotes
+    vendor_rfq_qs = VendorRFQ.objects.filter(
+        inquiry=inquiry
+    ).annotate(
+        has_quote=Exists(
+            VendorQuoteLine.objects.filter(
+                vendor_rfq_line__vendor_rfq=OuterRef('pk')
+            )
+        )
+    ).filter(
+        has_quote=True
+    ).select_related(
+        'vendor'
+    ).prefetch_related(
+        Prefetch(
+            'lines',
+            queryset=VendorRFQLine.objects.prefetch_related('quotes', 'inquiry_line')
+        )
+    )
 
-    # ✅ Further filter: only show vendors who actually have at least one quote line
-    vendor_rfqs = [
-        v for v in vendor_rfqs
-        if VendorQuoteLine.objects.filter(vendor_rfq_line__vendor_rfq=v).exists()
-    ]
+    vendor_rfqs = list(vendor_rfq_qs)
 
+    # POST → Confirm Winners
     if request.method == 'POST':
-        # User is selecting winning vendor RFQ lines
-        # POST shape: winner_<inquiry_line_id> = <vendor_rfq_line_id>
-        wins  = defaultdict(list)
-        for key, val in request.POST.items():
-            if key.startswith('winner_') and val:
-                inquiry_line_id   = key.replace('winner_', '')
-                vrfq_line_id      = val
-                wins[vrfq_line_id].append(inquiry_line_id)
 
-        if wins:
-            # Mark winning VendorRFQLines and update parent VendorRFQ statuses
-            winning_vrfq_ids = set()
-            all_vrfq_ids     = set(vrfq.pk for vrfq in vendor_rfqs)
+        winning_vrfq_line_ids = {
+            int(val)
+            for key, val in request.POST.items()
+            if key.startswith('winner_') and val
+        }
 
-            for vrfq_line_id in wins.keys():
-                try:
-                    vrfq_line = VendorRFQLine.objects.select_related('vendor_rfq').get(pk=vrfq_line_id)
-                    winning_vrfq_ids.add(vrfq_line.vendor_rfq_id)
-                except VendorRFQLine.DoesNotExist:
-                    pass
+        if not winning_vrfq_line_ids:
+            messages.warning(request, 'No winners selected.')
+            return redirect('compare_quotes', inquiry_pk=inquiry.pk)
 
-            VendorRFQ.objects.filter(pk__in=winning_vrfq_ids).update(status=VendorRFQ.STATUS_WON)
+        with transaction.atomic():
+
+            # Reset only pending lines
+            VendorRFQLine.objects.filter(
+                vendor_rfq__inquiry=inquiry,
+                is_winner=False
+            ).update(is_winner=False)
+
+            winning_vendor_ids = set()
+
+            for vrfq_line in VendorRFQLine.objects.select_related(
+                'vendor_rfq',
+                'inquiry_line'
+            ).filter(
+                pk__in=winning_vrfq_line_ids
+            ):
+
+                vrfq_line.is_winner = True
+                vrfq_line.save(update_fields=['is_winner'])
+
+                winning_vendor_ids.add(vrfq_line.vendor_rfq_id)
+
+                # Mark competitors LOST for THIS SAME line
+                VendorRFQ.objects.filter(
+                    inquiry=inquiry,
+                    lines__inquiry_line=vrfq_line.inquiry_line,
+                    lines__quotes__isnull=False
+                ).exclude(
+                    pk=vrfq_line.vendor_rfq_id
+                ).update(status=VendorRFQ.STATUS_LOST)
+
+            # Mark winners WON
             VendorRFQ.objects.filter(
-                pk__in=all_vrfq_ids - winning_vrfq_ids
-            ).update(status=VendorRFQ.STATUS_LOST)
+                pk__in=winning_vendor_ids
+            ).update(status=VendorRFQ.STATUS_WON)
 
-            messages.success(request, 'Winners selected. Vendor RFQs updated.')
-            return redirect('rfq_detail', pk=inquiry_pk)
+        messages.success(request, 'Winners confirmed successfully.')
+        return redirect('rfq_detail', pk=inquiry_pk)
 
-    # Build comparison grid:
-    # { inquiry_line → { vendor → VendorQuoteLine or None } }
-    inquiry_lines = inquiry.lines.all()
+    # ONLY SHOW PENDING LINES (No Winner Yet)
+    inquiry_lines = inquiry.lines.annotate(
+        has_winner=Exists(
+            VendorRFQLine.objects.filter(
+                inquiry_line=OuterRef('pk'),
+                is_winner=True
+            )
+        )
+    ).filter(
+        has_winner=False
+    )
+
+    # If no pending lines → redirect
+    if not inquiry_lines.exists():
+        messages.info(request, "All lines already finalized.")
+        return redirect('rfq_detail', pk=inquiry_pk)
+
+    # Build Comparison Grid
     grid = []
 
     for inq_line in inquiry_lines:
+
         row = {
             'inquiry_line': inq_line,
             'vendor_quotes': [],
+            'best_price': None,
         }
+
+        prices = []
+
         for vrfq in vendor_rfqs:
-            vrfq_line = vrfq.lines.filter(inquiry_line=inq_line).first()
-            best_quote = vrfq_line.quotes.order_by('unit_price').first() if vrfq_line else None
+
+            vrfq_line = next(
+                (line for line in vrfq.lines.all()
+                 if line.inquiry_line_id == inq_line.id),
+                None
+            )
+
+            best_quote = (
+                vrfq_line.quotes.first()
+                if vrfq_line and vrfq_line.quotes.exists()
+                else None
+            )
+
+            if best_quote:
+                prices.append(best_quote.unit_price)
+
             row['vendor_quotes'].append({
                 'vrfq': vrfq,
                 'vrfq_line': vrfq_line,
                 'quote': best_quote,
             })
 
-        # ✅ Put best_price directly on the row — easy to compare in template
-        prices = [vc['quote'].unit_price for vc in row['vendor_quotes'] if vc['quote']]
-        row['best_price'] = min(prices) if prices else None
-        grid.append(row)
+        if prices:
+            row['best_price'] = min(prices)
+            grid.append(row)
 
-    return render(request, 'vendor_rfq/compare_quotes.html', {
+    return render(request, 'vendor_rfq/compare_quotes1.html', {
         'inquiry': inquiry,
         'vendor_rfqs': vendor_rfqs,
         'grid': grid,
-        # best_prices removed — use row.best_price instead
     })
 
 
@@ -385,6 +450,7 @@ def debug_inquiry(request, inquiry_pk):
         )
     return HttpResponse('\n'.join(lines), content_type='text/plain')
 
+
 @login_required
 def verify_vendor_quote(request, parsed_quote_id):
     """User verifies AI-parsed vendor quote before saving as VendorQuoteLines."""
@@ -396,7 +462,7 @@ def verify_vendor_quote(request, parsed_quote_id):
         ).prefetch_related('vendor_rfq__lines'),
         pk=parsed_quote_id
     )
-    vrfq  = parsed.vendor_rfq
+    vrfq = parsed.vendor_rfq
     lines = vrfq.lines.prefetch_related('quotes').all()
 
     if request.method == 'POST':
@@ -409,7 +475,7 @@ def verify_vendor_quote(request, parsed_quote_id):
 
             for item in quote_lines:
                 vrfq_line_id = item.get('vrfq_line_id')
-                unit_price   = item.get('unit_price')
+                unit_price = item.get('unit_price')
                 if not vrfq_line_id or not unit_price:
                     continue
 
@@ -421,14 +487,14 @@ def verify_vendor_quote(request, parsed_quote_id):
                 VendorQuoteLine.objects.update_or_create(
                     vendor_rfq_line=vrfq_line,
                     defaults={
-                        'unit_price':         unit_price,
+                        'unit_price': unit_price,
                         'quantity_available': item.get('qty_available', 0),
-                        'lead_time_days':     item.get('lead_time_days') or None,
-                        'condition':          item.get('condition', ''),
-                        'certification':      item.get('certification', ''),
-                        'notes':              item.get('notes', ''),
-                        'source':             VendorQuoteLine.SOURCE_EMAIL,
-                        'entered_by':         request.user,
+                        'lead_time_days': item.get('lead_time_days') or None,
+                        'condition': item.get('condition', ''),
+                        'certification': item.get('certification', ''),
+                        'notes': item.get('notes', ''),
+                        'source': VendorQuoteLine.SOURCE_EMAIL,
+                        'entered_by': request.user,
                     }
                 )
 
@@ -464,9 +530,9 @@ def verify_vendor_quote(request, parsed_quote_id):
         })
 
     return render(request, 'vendor_rfq/verify_vendor_quote.html', {
-        'parsed':          parsed,
-        'vrfq':            vrfq,
-        'lines':           lines,
+        'parsed': parsed,
+        'vrfq': vrfq,
+        'lines': lines,
         'initial_matches': initial_matches,
     })
 
@@ -477,10 +543,8 @@ def retry_parse_vendor_quote(request, parsed_quote_id):
     from apps.vendor_rfq.models import ParsedVendorQuote
     from apps.email_integration.parser import parse_vendor_quote_email
 
-
-
     parsed = get_object_or_404(ParsedVendorQuote, pk=parsed_quote_id)
-    vrfq   = parsed.vendor_rfq
+    vrfq = parsed.vendor_rfq
 
     try:
         rfq_line_pns = list(vrfq.lines.values_list('part_number', flat=True))

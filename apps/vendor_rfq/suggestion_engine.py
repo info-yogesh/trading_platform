@@ -10,8 +10,8 @@ def get_vendor_suggestions(inquiry):
         all_vendors: queryset of all active vendors
         reasons: dict { (vendor_id, part_number): reason_label }
     """
-    suggested  = defaultdict(set)
-    reasons    = {}
+    suggested = defaultdict(set)
+    reasons = {}
     part_numbers = [l.part_number_raw for l in inquiry.lines.all()]
 
     for line in inquiry.lines.all():

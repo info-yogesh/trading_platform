@@ -22,7 +22,6 @@ Return ONLY valid JSON in this exact shape:
 - Output ONLY the JSON object. No explanation, no markdown."""
 
 
-
 def parse_email_with_ai(subject, body_text):
     response = requests.post(
         url="https://openrouter.ai/api/v1/chat/completions",
@@ -125,3 +124,30 @@ def parse_vendor_quote_email(subject, body_text, rfq_lines=None):
     except json.JSONDecodeError:
         match = re.search(r'\{.*\}', raw, re.DOTALL)
         return json.loads(match.group()) if match else {"lines": []}
+
+
+def is_email_relevant(email_log):
+    """
+    Quick check if an inbound email looks like a customer RFQ inquiry.
+    Returns (bool, score, reason)
+    """
+    subject = (email_log.subject or '').lower()
+    body = (email_log.body_text or '').lower()
+    combined = f"{subject} {body[:500]}"
+
+    # Keywords that suggest an RFQ inquiry
+    rfq_keywords = [
+        'rfq', 'request for quote', 'quotation', 'quote request',
+        'pricing', 'availability', 'part number', 'component',
+        'supply', 'stock', 'lead time', 'inquiry', 'enquiry',
+    ]
+
+    score = sum(1 for kw in rfq_keywords if kw in combined)
+
+    if score >= 2:
+        return True, score, 'Matched RFQ keywords'
+    elif score == 1:
+        return True, score, 'Possible RFQ — low confidence'
+    else:
+        return False, score, 'No RFQ keywords found'
+

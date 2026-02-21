@@ -1,6 +1,7 @@
 from django.contrib import admin
 from .models import InventoryItem
 
+
 @admin.register(InventoryItem)
 class InventoryItemAdmin(admin.ModelAdmin):
     list_display = ['part', 'item_type', 'quantity', 'quantity_available', 'cost', 'currency', 'condition', 'location']

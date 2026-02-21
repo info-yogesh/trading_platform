@@ -81,10 +81,10 @@ def rfq_create(request):
         )
         rfq.save()
 
-        pn_list   = request.POST.getlist('line_pn[]')
+        pn_list = request.POST.getlist('line_pn[]')
         desc_list = request.POST.getlist('line_desc[]')
-        qty_list  = request.POST.getlist('line_qty[]')
-        cd_list   = request.POST.getlist('line_cd[]')
+        qty_list = request.POST.getlist('line_qty[]')
+        cd_list = request.POST.getlist('line_cd[]')
 
         for i, pn in enumerate(pn_list):
             if not pn.strip():
@@ -112,6 +112,7 @@ def rfq_create(request):
 
     })
 
+
 @login_required
 def rfq_detail(request, pk):
     rfq = get_object_or_404(RFQ, pk=pk)
@@ -126,8 +127,8 @@ def rfq_detail(request, pk):
     # Summary stats per vendor RFQ
     vendor_rfq_stats = []
     for vrfq in vendor_rfqs:
-        total   = vrfq.lines.count()
-        quoted  = vrfq.lines.filter(quotes__isnull=False).distinct().count()
+        total = vrfq.lines.count()
+        quoted = vrfq.lines.filter(quotes__isnull=False).distinct().count()
         vendor_rfq_stats.append({
             'vrfq': vrfq,
             'total_lines': total,
@@ -135,12 +136,20 @@ def rfq_detail(request, pk):
             'progress': int((quoted / total * 100)) if total else 0,
         })
 
+    sent_statuses = {'sent', 'quoted', 'won', 'lost'}
+    vendor_sent_count = sum(1 for s in vendor_rfq_stats if s['vrfq'].status in sent_statuses)
+    vendor_quoted_count = sum(1 for s in vendor_rfq_stats if s['vrfq'].status == 'quoted')
+    has_any_quoted = vendor_quoted_count > 0
+
     return render(request, 'rfq/detail.html', {
         'rfq': rfq,
         'lines': lines,
         'audit_logs': audit_logs,
         'vendor_rfq_stats': vendor_rfq_stats,
         'has_vendor_rfqs': vendor_rfqs.exists(),
+        'vendor_sent_count': vendor_sent_count,  # ✅ fix summary bar
+        'vendor_quoted_count': vendor_quoted_count,  # ✅ fix summary bar
+        'has_any_quoted': has_any_quoted,  # ✅ fix duplicate banner
     })
 
 

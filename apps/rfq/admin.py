@@ -1,9 +1,11 @@
 from django.contrib import admin
 from .models import RFQ, RFQLine, RFQAuditLog
 
+
 class RFQLineInline(admin.TabularInline):
     model = RFQLine
     extra = 1
+
 
 @admin.register(RFQ)
 class RFQAdmin(admin.ModelAdmin):
@@ -12,6 +14,7 @@ class RFQAdmin(admin.ModelAdmin):
     search_fields = ['rfq_number', 'customer__name']
     readonly_fields = ['rfq_number', 'created_at', 'updated_at']
     inlines = [RFQLineInline]
+
 
 @admin.register(RFQLine)
 class RFQLineAdmin(admin.ModelAdmin):

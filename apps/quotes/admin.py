@@ -1,9 +1,11 @@
 from django.contrib import admin
 from .models import Quote, QuoteLine
 
+
 class QuoteLineInline(admin.TabularInline):
     model = QuoteLine
     extra = 1
+
 
 @admin.register(Quote)
 class QuoteAdmin(admin.ModelAdmin):

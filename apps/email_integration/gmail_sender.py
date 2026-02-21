@@ -7,12 +7,12 @@ from .oauth import get_credentials_for_account
 
 def send_email(account, to, subject, body):
     """Send a plain-text email via Gmail API using OAuth2."""
-    creds   = get_credentials_for_account(account)
+    creds = get_credentials_for_account(account)
     service = build('gmail', 'v1', credentials=creds)
 
     message = MIMEText(body, 'plain')
-    message['to']      = to
-    message['from']    = account.email
+    message['to'] = to
+    message['from'] = account.email
     message['subject'] = subject
 
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')

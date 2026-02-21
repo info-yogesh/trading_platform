@@ -1,0 +1,204 @@
+{% extends "base/base.html" %}
+{% block title %}Compare Quotes — {{ inquiry.rfq_number }}{% endblock %}
+{% block page_title %}Compare Vendor Quotes{% endblock %}
+
+{% block topbar_actions %}
+<a href="/rfq/{{ inquiry.pk }}/" class="btn btn-secondary btn-sm">
+    <i class="fas fa-arrow-left"></i> Back to {{ inquiry.rfq_number }}
+</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Header bar -->
+<div style="background:#1e293b;border-radius:10px;padding:14px 20px;margin-bottom:20px;
+            display:flex;align-items:center;gap:20px;color:#e2e8f0;flex-wrap:wrap;">
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">RFQ</div>
+        <div style="font-weight:700;font-family:monospace;color:#60a5fa;">{{ inquiry.rfq_number }}</div>
+    </div>
+    <div style="width:1px;height:28px;background:#334155;"></div>
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Customer</div>
+        <div style="font-weight:600;font-size:13px;">{{ inquiry.customer.name }}</div>
+    </div>
+    <div style="width:1px;height:28px;background:#334155;"></div>
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Vendors</div>
+        <div style="font-weight:600;">{{ vendor_rfqs|length }}</div>
+    </div>
+    <div style="width:1px;height:28px;background:#334155;"></div>
+    <div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;">Lines</div>
+        <div style="font-weight:600;">{{ grid|length }}</div>
+    </div>
+    <div style="margin-left:auto;font-size:12px;color:#94a3b8;">
+        <i class="fas fa-info-circle"></i>
+        Green = best price. Select winners and confirm.
+    </div>
+</div>
+
+{% if not vendor_rfqs %}
+<!-- Empty state -->
+<div class="card">
+    <div style="padding:60px;text-align:center;color:#94a3b8;">
+        <i class="fas fa-balance-scale" style="font-size:40px;color:#cbd5e1;display:block;margin-bottom:16px;"></i>
+        <div style="font-size:16px;font-weight:600;color:#64748b;margin-bottom:8px;">No quotes to compare yet</div>
+        <div style="font-size:13px;margin-bottom:20px;">Vendors need to submit quotes before you can compare them.</div>
+        <a href="/rfq/{{ inquiry.pk }}/" class="btn btn-primary">
+            <i class="fas fa-arrow-left"></i> Back to RFQ
+        </a>
+    </div>
+</div>
+
+{% else %}
+
+<form method="post">
+    {% csrf_token %}
+    <div class="card">
+        <div class="card-header">
+            <h2>Quote Comparison</h2>
+            <span style="font-size:12px;color:#64748b;">
+                <i class="fas fa-trophy" style="color:#f59e0b;"></i> Highlighted = best price
+            </span>
+        </div>
+
+        <div class="table-wrapper" style="overflow-x:auto;">
+            <table style="min-width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f8fafc;">
+                        <th style="padding:10px 14px;text-align:left;font-size:11px;color:#64748b;
+                                   text-transform:uppercase;border-bottom:2px solid #e2e8f0;
+                                   position:sticky;left:0;background:#f8fafc;z-index:2;min-width:160px;">
+                            Part Number
+                        </th>
+                        <th style="padding:10px 14px;text-align:center;font-size:11px;color:#64748b;
+                                   text-transform:uppercase;border-bottom:2px solid #e2e8f0;">
+                            Qty
+                        </th>
+                        {% for vrfq in vendor_rfqs %}
+                        <th colspan="3" style="padding:10px 14px;text-align:center;font-size:11px;
+                                   border-bottom:2px solid #e2e8f0;border-left:2px solid #e2e8f0;
+                                   background:#f0f9ff;min-width:220px;">
+                            <div style="font-weight:700;color:#1e293b;font-size:12px;">
+                                {{ vrfq.vendor.name }}
+                            </div>
+                            <div style="color:#64748b;font-size:10px;font-family:monospace;">
+                                {{ vrfq.rfq_number }}
+                            </div>
+                        </th>
+                        {% endfor %}
+                        <th style="padding:10px 14px;text-align:center;font-size:11px;color:#64748b;
+                                   text-transform:uppercase;border-bottom:2px solid #e2e8f0;
+                                   border-left:2px solid #3b82f6;background:#eff6ff;min-width:160px;">
+                            Select Winner
+                        </th>
+                    </tr>
+                    <tr style="background:#f8fafc;">
+                        <th style="position:sticky;left:0;background:#f8fafc;z-index:2;
+                                   border-bottom:1px solid #e2e8f0;"></th>
+                        <th style="border-bottom:1px solid #e2e8f0;"></th>
+                        {% for vrfq in vendor_rfqs %}
+                        <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748b;
+                                   border-bottom:1px solid #e2e8f0;border-left:2px solid #e2e8f0;
+                                   background:#f0f9ff;">Price</th>
+                        <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748b;
+                                   border-bottom:1px solid #e2e8f0;background:#f0f9ff;">Lead</th>
+                        <th style="padding:6px 8px;text-align:center;font-size:10px;color:#64748b;
+                                   border-bottom:1px solid #e2e8f0;background:#f0f9ff;">Qty Avail</th>
+                        {% endfor %}
+                        <th style="border-bottom:1px solid #e2e8f0;border-left:2px solid #3b82f6;
+                                   background:#eff6ff;"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in grid %}
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <!-- Part Number -->
+                        <td style="padding:10px 14px;font-weight:700;font-family:monospace;
+                                   font-size:13px;position:sticky;left:0;background:#fff;z-index:1;
+                                   border-right:1px solid #f1f5f9;">
+                            {{ row.inquiry_line.part_number_raw }}
+                            {% if row.inquiry_line.description %}
+                            <div style="font-size:11px;color:#94a3b8;font-family:sans-serif;
+                                        font-weight:400;margin-top:2px;">
+                                {{ row.inquiry_line.description }}
+                            </div>
+                            {% endif %}
+                        </td>
+                        <!-- Qty Requested -->
+                        <td style="padding:10px 14px;text-align:center;font-size:13px;color:#64748b;">
+                            {{ row.inquiry_line.quantity }}
+                        </td>
+                        <!-- Vendor quote columns -->
+                        {% for vc in row.vendor_quotes %}
+                        {% with q=vc.quote vline=vc.vrfq_line %}
+                        {% if q %}
+                        <td style="padding:8px 10px;text-align:center;border-left:2px solid #e2e8f0;
+                                   {% if row.best_price and q.unit_price == row.best_price %}
+                                   background:#d1fae5;
+                                   {% endif %}">
+                            <div style="font-weight:700;font-size:14px;color:#065f46;">
+                                ${{ q.unit_price }}
+                            </div>
+                        </td>
+                        <td style="padding:8px 10px;text-align:center;font-size:12px;
+                                   {% if row.best_price and q.unit_price == row.best_price %}
+                                   background:#d1fae5;
+                                   {% endif %}">
+                            {% if q.lead_time_days %}
+                                <span style="font-weight:600;">{{ q.lead_time_days }}</span>d
+                            {% else %}—{% endif %}
+                        </td>
+                        <td style="padding:8px 10px;text-align:center;font-size:12px;
+                                   {% if row.best_price and q.unit_price == row.best_price %}
+                                   background:#d1fae5;
+                                   {% endif %}">
+                            {{ q.quantity_available|default:"—" }}
+                        </td>
+                        {% else %}
+                        <td colspan="3" style="text-align:center;color:#cbd5e1;font-size:12px;
+                                               border-left:2px solid #e2e8f0;padding:8px;">
+                            No quote
+                        </td>
+                        {% endif %}
+                        {% endwith %}
+                        {% endfor %}
+
+                        <!-- Winner selection -->
+                        <td style="padding:8px 12px;border-left:2px solid #3b82f6;background:#eff6ff;">
+                            <select name="winner_{{ row.inquiry_line.pk }}"
+                                    style="width:100%;border:1px solid #bfdbfe;border-radius:5px;
+                                           padding:5px 8px;font-size:12px;background:#fff;">
+                                <option value="">— No winner —</option>
+                                {% for vc in row.vendor_quotes %}
+                                    {% if vc.vrfq_line and vc.quote %}
+                                    <option value="{{ vc.vrfq_line.pk }}">
+                                        {{ vc.vrfq.vendor.name }} · ${{ vc.quote.unit_price }}
+                                    </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="padding:16px;border-top:1px solid #e2e8f0;
+                    display:flex;gap:10px;justify-content:flex-end;align-items:center;">
+            <span style="font-size:12px;color:#64748b;margin-right:auto;">
+                <i class="fas fa-info-circle"></i>
+                Selecting winners will mark other vendors as Lost.
+            </span>
+            <a href="/rfq/{{ inquiry.pk }}/" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-trophy"></i> Confirm Winners
+            </button>
+        </div>
+    </div>
+</form>
+{% endif %}
+
+{% endblock %}
