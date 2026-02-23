@@ -1,218 +1,344 @@
-import os
+# apps/email_integration/views.py
+import json
+import logging
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.http import JsonResponse
 from django.utils import timezone
+from django.views.decorators.http import require_POST
+
 from .models import EmailAccount, EmailLog, ParsedEmailData
 from .gmail_service import fetch_new_emails_for_account
-from .parser import parse_email_with_ai, is_email_relevant
-from ..vendor_rfq.models import ParsedVendorQuote
+from .parser import parse_email_with_ai
+from .classifier import classify_email
 
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Dashboard
+# ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def email_dashboard(request):
-    accounts = EmailAccount.objects.filter(is_active=True)
-    pending_review = EmailLog.objects.filter(status='parsed').select_related('parsed_data')[:20]
-    recent_emails = EmailLog.objects.select_related('account').all()[:50]
+    """
+    Main email integration page.
+    Optional GET param ?account=<id> scopes the Email Log to one account.
+    """
+    accounts = EmailAccount.objects.filter(is_active=True).order_by('name')
 
-    # ✅ Vendor quotes waiting for verification
-    pending_vendor_quotes = ParsedVendorQuote.objects.filter(
-        is_confirmed=False
-    ).select_related('vendor_rfq__vendor', 'email_log')[:10]
+    active_account_id = None
+    raw = request.GET.get('account')
+    if raw:
+        try:
+            active_account_id = int(raw)
+        except (ValueError, TypeError):
+            pass
 
-    context = {
+    # ── Inquiries: new inbound emails awaiting review ─────────────────────────
+    inquiries = (
+        EmailLog.objects
+        .filter(
+            direction='inbound',
+            email_type='new_inquiry',
+            status__in=['parsed', 'parse_failed'],
+        )
+        .select_related('account', 'parsed_data')
+        .order_by('-received_at')[:30]
+    )
+
+    # ── Vendor RFQs: vendor replied to our outbound VRFQ ─────────────────────
+    vendor_rfqs = (
+        EmailLog.objects
+        .filter(
+            direction='inbound',
+            email_type='vendor_reply',
+            status__in=['parsed', 'parse_failed'],
+        )
+        .select_related('account', 'parsed_data', 'parsed_rfq', 'linked_inquiry')
+        .order_by('-received_at')[:20]
+    )
+
+    # ── Email Log (optionally filtered) ──────────────────────────────────────
+    log_qs = (
+        EmailLog.objects
+        .select_related('account', 'parsed_rfq', 'linked_inquiry')
+        .order_by('-received_at')
+    )
+    if active_account_id:
+        log_qs = log_qs.filter(account_id=active_account_id)
+    recent_emails = log_qs[:60]
+
+    return render(request, 'email_integration/dashboard.html', {
         'accounts': accounts,
+        'active_account_id': active_account_id,
+        'inquiries': inquiries,
+        'inquiries_count': inquiries.count(),
+        'vendor_rfqs': vendor_rfqs,
+        'vendor_rfqs_count': vendor_rfqs.count(),
         'recent_emails': recent_emails,
-        'pending_review': pending_review,
-        'pending_count': pending_review.count(),
-        'pending_vendor_quotes': pending_vendor_quotes,
-    }
+    })
 
-    return render(request, 'email_integration/dashboard.html', context)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fetch
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def fetch_emails_now(request):
+    """Fetch all active OAuth2 accounts."""
+    return _run_fetch(EmailAccount.objects.filter(is_active=True, use_oauth2=True))
 
 
 @login_required
-def fetch_emails_now(request):
-    if request.method != 'POST':
-        return JsonResponse({'error': 'POST required'}, status=405)
+@require_POST
+def fetch_account_emails(request, account_id):
+    """Fetch a single account (per-account Sync button)."""
+    account = get_object_or_404(EmailAccount, pk=account_id, is_active=True)
+    if not account.use_oauth2:
+        return JsonResponse(
+            {'error': f'Account "{account.name}" is not configured for Gmail OAuth2.'},
+            status=400,
+        )
+    return _run_fetch(EmailAccount.objects.filter(pk=account.pk))
 
-    accounts = EmailAccount.objects.filter(is_active=True, use_oauth2=True)
-    if not accounts.exists():
-        return JsonResponse({'error': 'No Gmail accounts connected.'}, status=400)
+
+def _run_fetch(accounts_qs):
+    if not accounts_qs.exists():
+        return JsonResponse({'error': 'No active Gmail accounts found.'}, status=400)
 
     total_fetched = 0
-    total_parsed = 0   # customer inquiries
-    total_vendor = 0   # vendor quote replies
-    total_irrelevant = 0
+    total_parsed = 0
+    total_failed = 0
     errors = []
 
-    from apps.email_integration.gmail_service import detect_vendor_rfq_reply
-
-    for account in accounts:
+    for account in accounts_qs:
         try:
             new_logs = fetch_new_emails_for_account(account)
             total_fetched += len(new_logs)
 
             for log in new_logs:
-
-                # ── Check if this is a vendor quote reply first ──
-                vrfq = detect_vendor_rfq_reply(log)
-                if vrfq:
-                    log.status = 'parsing'
-                    log.save()
-                    try:
-                        _parse_and_store_vendor_quote(log, vrfq)
-                        total_vendor += 1
-                    except Exception as e:
-                        log.status = 'failed'
-                        log.save()
-                        errors.append(f"Vendor quote parse error ({log.subject[:30]}): {str(e)}")
-                    continue
-
-                # ── Otherwise treat as customer inquiry ──
-                relevant, score, reason = is_email_relevant(log)
-                log.relevance_score = score
-                log.relevance_reason = reason
-
-                if not relevant:
-                    log.status = 'irrelevant'
-                    log.save()
-                    total_irrelevant += 1
-                    continue
-
                 log.status = 'parsing'
-                log.save()
+                log.save(update_fields=['status'])
                 try:
                     result = parse_email_with_ai(log.subject, log.body_text)
+                    lines = result.get('lines', [])
                     ParsedEmailData.objects.update_or_create(
                         email_log=log,
                         defaults={
                             'raw_parsed': result,
-                            'confirmed_lines': result.get('lines', []),
-                        }
+                            'confirmed_lines': lines,
+                        },
                     )
-                    log.status = 'parsed'
-                    log.save()
-                    total_parsed += 1
-                except Exception as e:
-                    log.status = 'failed'
-                    log.save()
-                    errors.append(f"Parse error ({log.subject[:30]}): {str(e)}")
+                    # parse_failed if AI returned 0 lines — needs manual entry
+                    log.status = 'parsed' if lines else 'parse_failed'
+                    log.save(update_fields=['status'])
+                    if lines:
+                        total_parsed += 1
+                    else:
+                        total_failed += 1
+                except Exception as exc:
+                    log.status = 'parse_failed'
+                    log.save(update_fields=['status'])
+                    total_failed += 1
+                    errors.append(f"Parse error ({log.subject[:30]}): {exc}")
 
-        except Exception as e:
-            errors.append(f"{account.email}: {str(e)}")
+        except Exception as exc:
+            errors.append(f"{account.email}: {exc}")
 
-    response = {
+    return JsonResponse({
         'fetched': total_fetched,
         'parsed': total_parsed,
-        'vendor': total_vendor,
-        'irrelevant': total_irrelevant,
+        'parse_failed': total_failed,
         'errors': errors,
-    }
-    return JsonResponse(response)
+    })
 
 
-def _parse_and_store_vendor_quote(email_log, vrfq):
-    """Parse vendor reply email and store as ParsedVendorQuote for user verification."""
-    from apps.email_integration.parser import parse_vendor_quote_email
-    from apps.vendor_rfq.models import ParsedVendorQuote
-
-    rfq_line_pns = list(vrfq.lines.values_list('part_number', flat=True))
-    result = parse_vendor_quote_email(
-        subject=email_log.subject,
-        body_text=email_log.body_text,
-        rfq_lines=rfq_line_pns,
-    )
-
-    ParsedVendorQuote.objects.update_or_create(
-        email_log=email_log,
-        defaults={
-            'vendor_rfq':   vrfq,
-            'raw_parsed':   result,
-            'is_confirmed': False,
-        }
-    )
-
-    # Link reply email to VendorRFQ
-    vrfq.reply_email = email_log
-    vrfq.save(update_fields=['reply_email'])
-
-    email_log.status = 'parsed'
-    email_log.save()
-
+# ─────────────────────────────────────────────────────────────────────────────
+# Review / Verify
+# ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def email_verify(request, email_log_id):
-    import json
-    email_log = get_object_or_404(EmailLog, id=email_log_id)
+    """
+    Unified review page for:
+      - new_inquiry  : fresh customer email → create Inquiry/RFQ
+      - rfq_reply    : customer replied to our quote → show original inquiry alongside
+      - vendor_reply : vendor replied to our VRFQ    → show original VRFQ alongside
 
-    # ✅ If this is a vendor quote reply, redirect to the correct verify page
-    if hasattr(email_log, 'parsedvendorquote'):
-        pq = email_log.parsedvendorquote
-        return redirect('verify_vendor_quote', parsed_quote_id=pq.pk)
-
-    # Ensure correct state for customer inquiries
-    if email_log.status != 'parsed':
-        messages.warning(request, "Email must be parsed before verification.")
-        return redirect('email_dashboard')
-
+    Also handles:
+      - Manual line entry when AI parsing failed (status='parse_failed')
+      - AI parse retry (AJAX endpoint below)
+    """
+    email_log = get_object_or_404(
+        EmailLog.objects.select_related(
+            'account', 'parsed_rfq', 'linked_inquiry',
+            'linked_inquiry__parsed_rfq',
+        ),
+        id=email_log_id,
+    )
     parsed = getattr(email_log, 'parsed_data', None)
-    if not parsed:
-        messages.error(request, "Parsed data not found for this email.")
-        return redirect('email_dashboard')
+
+    # Fetch the original inquiry/email this is replying to (if applicable)
+    original_email = None
+    original_lines = []
+    if email_log.linked_inquiry:
+        original_email = email_log.linked_inquiry
+        orig_parsed = getattr(original_email, 'parsed_data', None)
+        if orig_parsed:
+            original_lines = orig_parsed.confirmed_lines or orig_parsed.raw_parsed.get('lines', [])
+
+    # All replies that share the same thread as this email (for context)
+    thread_emails = []
+    if email_log.linked_inquiry:
+        thread_emails = (
+            EmailLog.objects
+            .filter(linked_inquiry=email_log.linked_inquiry)
+            .exclude(pk=email_log.pk)
+            .order_by('received_at')
+            .select_related('parsed_data')[:10]
+        )
 
     if request.method == 'POST':
         action = request.POST.get('action')
-        lines_json = request.POST.get('lines_json', '[]')
 
         if action == 'confirm':
-            lines = json.loads(lines_json)
-            original = parsed.raw_parsed.get('lines', [])
+            lines_json = request.POST.get('lines_json', '[]')
+            try:
+                lines = json.loads(lines_json)
+            except json.JSONDecodeError:
+                lines = []
 
+            manually_entered = request.POST.get('manually_entered', 'false') == 'true'
+
+            # Ensure ParsedEmailData exists (may not if parsing completely failed)
+            if parsed is None:
+                parsed = ParsedEmailData(email_log=email_log, raw_parsed={'lines': []})
+
+            original_ai_lines = parsed.raw_parsed.get('lines', [])
             parsed.confirmed_lines = lines
             parsed.is_confirmed = True
             parsed.confirmed_by = request.user
             parsed.confirmed_at = timezone.now()
-            parsed.corrections_made = (lines != original)
+            parsed.corrections_made = (lines != original_ai_lines)
+            parsed.manually_entered = manually_entered
             parsed.save()
 
             email_log.status = 'confirmed'
-            email_log.save()
+            email_log.processed_at = timezone.now()
+            email_log.save(update_fields=['status', 'processed_at'])
 
-            customer_name = parsed.raw_parsed.get('customer_name', '') or ''
-            if not customer_name and email_log.from_address:
-                import re
-                match = re.match(r'^([^<]+)<', email_log.from_address)
-                if match:
-                    customer_name = match.group(1).strip()
-
+            # Pre-fill session so RFQ create view can consume it
             request.session['rfq_prefill'] = json.dumps({
                 'lines': lines,
                 'source': 'email_parsed',
                 'subject': email_log.subject,
                 'from': email_log.from_address,
-                'customer_name': customer_name,
+                'email_log_id': email_log.id,
+                'email_type': email_log.email_type,
+                'manually_entered': manually_entered,
             })
-            messages.success(request, 'Email confirmed — pre-filling RFQ.')
+
+            messages.success(request, 'Email confirmed — pre-filling Inquiry.')
             return redirect('/rfq/create/')
 
         elif action == 'skip':
             email_log.status = 'irrelevant'
-            email_log.save()
+            email_log.save(update_fields=['status'])
             messages.info(request, 'Email marked as not relevant.')
             return redirect('email_dashboard')
+
+        elif action == 'reclassify':
+            # Manual override of email_type
+            new_type = request.POST.get('email_type')
+            if new_type in dict(EmailLog.EMAIL_TYPE_CHOICES):
+                email_log.email_type = new_type
+                email_log.save(update_fields=['email_type'])
+                messages.success(request, f'Email reclassified as: {email_log.get_email_type_display()}')
+            return redirect('email_verify', email_log_id=email_log_id)
 
     return render(request, 'email_integration/verify.html', {
         'email_log': email_log,
         'parsed': parsed,
+        'original_email': original_email,
+        'original_lines': original_lines,
+        'thread_emails': thread_emails,
+        'email_type_choices': EmailLog.EMAIL_TYPE_CHOICES,
+        'ai_failed': email_log.status == 'parse_failed',
+        'has_lines': bool(parsed and (
+            parsed.raw_parsed.get('lines') or parsed.confirmed_lines
+        )),
     })
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# AJAX: Retry AI parse
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def retrigger_parse(request, email_log_id):
+    """
+    AJAX endpoint: re-run AI parsing on an email that previously failed.
+    Updates ParsedEmailData and EmailLog.status.
+    Returns JSON { lines: [...], status: 'parsed'|'parse_failed', error? }
+    """
+    email_log = get_object_or_404(EmailLog, id=email_log_id)
+    try:
+        result = parse_email_with_ai(email_log.subject, email_log.body_text)
+        lines = result.get('lines', [])
+        ParsedEmailData.objects.update_or_create(
+            email_log=email_log,
+            defaults={
+                'raw_parsed': result,
+                'confirmed_lines': lines,
+                'manually_entered': False,
+            },
+        )
+        new_status = 'parsed' if lines else 'parse_failed'
+        email_log.status = new_status
+        email_log.save(update_fields=['status'])
+        return JsonResponse({'lines': lines, 'status': new_status})
+    except Exception as exc:
+        return JsonResponse({'lines': [], 'status': 'parse_failed', 'error': str(exc)}, status=500)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AJAX: Reclassify email type
+# ─────────────────────────────────────────────────────────────────────────────
+
+@login_required
+@require_POST
+def reclassify_email(request, email_log_id):
+    """
+    AJAX endpoint: manually override the AI classification of an email.
+    Body: { email_type: 'new_inquiry' | 'rfq_reply' | 'vendor_reply' | 'other' }
+    """
+    email_log = get_object_or_404(EmailLog, id=email_log_id)
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    new_type = data.get('email_type', '')
+    valid_types = [t[0] for t in EmailLog.EMAIL_TYPE_CHOICES]
+    if new_type not in valid_types:
+        return JsonResponse({'error': f'Invalid type: {new_type}'}, status=400)
+
+    email_log.email_type = new_type
+    email_log.save(update_fields=['email_type'])
+    return JsonResponse({'email_type': new_type, 'display': email_log.get_email_type_display()})
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Manual parse (paste-and-parse)
+# ─────────────────────────────────────────────────────────────────────────────
+
 @login_required
 def email_parse(request):
-    """Manual paste-and-parse view (existing)."""
     if request.method == 'POST':
         body = request.POST.get('email_body', '')
         subject = request.POST.get('subject', '')
@@ -220,6 +346,10 @@ def email_parse(request):
         return JsonResponse({'parsed_lines': result.get('lines', []), 'subject': subject})
     return render(request, 'email_integration/parse.html')
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Account management
+# ─────────────────────────────────────────────────────────────────────────────
 
 @login_required
 def email_account_create(request):
@@ -240,43 +370,17 @@ def email_account_create(request):
 
 @login_required
 def oauth2_start(request):
-    from .oauth import get_oauth2_flow
-    flow = get_oauth2_flow()
-
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # dev only
-
-    auth_url, state = flow.authorization_url(
-        access_type='offline',
-        include_granted_scopes='true',
-        prompt='consent',
-    )
-    request.session['oauth2_state'] = state
+    from .gmail_service import get_oauth2_auth_url
+    account_id = request.GET.get('account_id')
+    auth_url = get_oauth2_auth_url(account_id)
     return redirect(auth_url)
 
 
 @login_required
 def oauth2_callback(request):
-    from .oauth import get_oauth2_flow
-    from googleapiclient.discovery import build
-
-    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # dev only
-
-    state = request.session.get('oauth2_state')
-    flow = get_oauth2_flow(state=state)
-    flow.fetch_token(authorization_response=request.build_absolute_uri())
-    creds = flow.credentials
-    service = build('oauth2', 'v2', credentials=creds)
-    user_info = service.userinfo().get().execute()
-    account, created = EmailAccount.objects.update_or_create(
-        email=user_info['email'],
-        defaults={
-            'name': user_info.get('name', user_info['email']),
-            'use_oauth2': True,
-            'oauth2_access_token': creds.token,
-            'oauth2_refresh_token': creds.refresh_token or '',
-            'oauth2_token_expiry': creds.expiry,
-            'is_active': True,
-        }
-    )
-    messages.success(request, f'Gmail {"connected" if created else "updated"}: {account.email}')
+    from .gmail_service import handle_oauth2_callback
+    code = request.GET.get('code')
+    state = request.GET.get('state')
+    handle_oauth2_callback(code, state)
+    messages.success(request, 'Gmail account connected successfully.')
     return redirect('email_dashboard')

@@ -1,27 +1,27 @@
 {% extends "base/base.html" %}
-{% block title %}Email Integration — TradePlatform{% endblock %}
+{% block title %}Email Integration — AeroFriend{% endblock %}
 {% block nav_email %}active{% endblock %}
 {% block page_title %}Email Integration{% endblock %}
 
 {% block topbar_actions %}
-<button class="btn btn-secondary btn-sm" onclick="fetchEmails()" id="fetchBtn">
-    <i class="fas fa-sync-alt" id="fetchIcon"></i>
-    <span id="fetchLabel">Fetch Emails</span>
-</button>
-<a href="/email/parse/" class="btn btn-secondary btn-sm"><i class="fas fa-magic"></i> Parse Email</a>
-<a href="/email/accounts/create/" class="btn btn-primary btn-sm"><i class="fas fa-plus"></i> Add Account</a>
+<a href="/email/parse/" class="btn btn-secondary btn-sm">
+    <i class="fas fa-magic"></i> Parse Email
+</a>
+<a href="/email/accounts/create/" class="btn btn-primary btn-sm">
+    <i class="fas fa-plus"></i> Add Account
+</a>
 {% endblock %}
 
 {% block content %}
 
-<!-- Needs Review Queue -->
-{% if pending_review %}
+{# ═══════════════════════ SECTION 1 — INQUIRIES ═══════════════════════════ #}
 <div class="card" style="margin-bottom:20px;border:2px solid #fde68a;">
     <div class="card-header" style="background:#fffbeb;">
-        <h2><i class="fas fa-clock" style="color:#f59e0b;margin-right:6px;"></i>
-            Needs Review
-            <span style="background:#f59e0b;color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;">
-                {{ pending_count }}
+        <h2 style="display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-inbox" style="color:#f59e0b;"></i>
+            Inquiries
+            <span style="background:#f59e0b;color:#fff;font-size:11px;padding:2px 10px;border-radius:10px;font-weight:700;">
+                {{ inquiries_count }}
             </span>
         </h2>
     </div>
@@ -31,30 +31,61 @@
                 <tr>
                     <th>From</th>
                     <th>Subject</th>
-                    <th>Lines Found</th>
+                    <th>Lines</th>
+                    <th>Parse Status</th>
+                    <th>Account</th>
                     <th>Received</th>
-                    <th></th>
+                    <th style="text-align:right;padding-right:16px;"></th>
                 </tr>
             </thead>
             <tbody>
-                {% for email in pending_review %}
+                {% for email in inquiries %}
                 <tr>
-                    <td style="font-size:12px;">{{ email.from_address|truncatechars:35 }}</td>
-                    <td style="font-size:13px;font-weight:500;">{{ email.subject|truncatechars:60 }}</td>
+                    <td style="font-size:12px;">{{ email.display_from|truncatechars:36 }}</td>
+                    <td style="font-size:13px;font-weight:500;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {{ email.subject|truncatechars:62 }}
+                    </td>
                     <td>
-                        {% if email.parsed_data %}
+                        {% if email.status == 'parse_failed' %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:11px;">
+                                <i class="fas fa-exclamation-triangle"></i> Failed
+                            </span>
+                        {% elif email.parsed_data and email.parsed_data.raw_parsed.lines %}
                             <span class="badge badge-approved">
-                                {{ email.parsed_data.raw_parsed.lines|length }} lines
+                                {{ email.parsed_data.raw_parsed.lines|length }}&nbsp;Lines
                             </span>
                         {% else %}
                             <span style="color:#94a3b8;">—</span>
                         {% endif %}
                     </td>
-                    <td style="font-size:12px;color:#64748b;">{{ email.received_at|date:"d M H:i" }}</td>
                     <td>
-                        <a href="/email/verify/{{ email.id }}/" class="btn btn-primary btn-sm">
-                            <i class="fas fa-eye"></i> Review
+                        {% if email.status == 'parse_failed' %}
+                            <span style="font-size:11px;color:#ef4444;font-weight:600;">
+                                <i class="fas fa-robot"></i> Manual needed
+                            </span>
+                        {% else %}
+                            <span style="font-size:11px;color:#10b981;">
+                                <i class="fas fa-robot"></i> AI parsed
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:11px;color:#64748b;">
+                        {% if email.account %}{{ email.account.name }}{% else %}—{% endif %}
+                    </td>
+                    <td style="font-size:12px;color:#64748b;white-space:nowrap;">
+                        {{ email.received_at|date:"d M H:i" }}
+                    </td>
+                    <td style="text-align:right;padding-right:16px;">
+                        <a href="/email/verify/{{ email.id }}/" class="btn btn-primary btn-sm" style="min-width:86px;">
+                            <i class="fas fa-eye"></i>&nbsp;Review
                         </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:32px;color:#64748b;">
+                        <i class="fas fa-check-circle" style="color:#10b981;margin-right:6px;"></i>
+                        No inquiries pending review.
                     </td>
                 </tr>
                 {% endfor %}
@@ -62,17 +93,15 @@
         </table>
     </div>
 </div>
-{% endif %}
 
-{% if pending_vendor_quotes %}
-<div class="card" style="margin-bottom:20px;border:2px solid #bbf7d0;">
+{# ═══════════════════════ SECTION 2 — VENDOR RFQs ════════════════════════ #}
+<div class="card" style="margin-bottom:20px;border:2px solid #d1fae5;">
     <div class="card-header" style="background:#f0fdf4;">
-        <h2>
-            <i class="fas fa-reply" style="color:#10b981;margin-right:6px;"></i>
-            Vendor Quote Replies
-            <span style="background:#10b981;color:#fff;font-size:11px;
-                         padding:2px 8px;border-radius:10px;margin-left:8px;">
-                {{ pending_vendor_quotes|length }}
+        <h2 style="display:flex;align-items:center;gap:8px;">
+            <i class="fas fa-reply" style="color:#10b981;"></i>
+            Vendor RFQs
+            <span style="background:#10b981;color:#fff;font-size:11px;padding:2px 10px;border-radius:10px;font-weight:700;">
+                {{ vendor_rfqs_count }}
             </span>
         </h2>
     </div>
@@ -81,45 +110,66 @@
             <thead>
                 <tr>
                     <th>Vendor</th>
-                    <th>VRFQ</th>
+                    <th>Linked RFQ</th>
                     <th>Subject</th>
-                    <th>Lines Parsed</th>
+                    <th>Lines</th>
+                    <th>Parse Status</th>
                     <th>Received</th>
-                    <th></th>
+                    <th style="text-align:right;padding-right:16px;"></th>
                 </tr>
             </thead>
             <tbody>
-                {% for pq in pending_vendor_quotes %}
+                {% for email in vendor_rfqs %}
                 <tr>
-                    <td style="font-weight:600;">{{ pq.vendor_rfq.vendor.name }}</td>
-                    <td style="font-family:monospace;font-size:12px;">
-                        <a href="/vendor-rfq/{{ pq.vendor_rfq.pk }}/" style="color:#3b82f6;">
-                            {{ pq.vendor_rfq.rfq_number }}
-                        </a>
-                    </td>
-                    <td style="font-size:13px;">{{ pq.email_log.subject|truncatechars:50 }}</td>
+                    <td style="font-size:13px;font-weight:600;">{{ email.display_from|truncatechars:28 }}</td>
                     <td>
-                        <span class="badge badge-approved">
-                            {{ pq.raw_parsed.lines|length }} lines
-                        </span>
-                    </td>
-                    <td style="font-size:12px;color:#64748b;">
-                        {{ pq.email_log.received_at|date:"d M H:i" }}
-                    </td>
-                    <td>
-                        {% if pq.email_log.parsedvendorquote %}
-                            <!-- Vendor quote reply — go straight to vendor verify -->
-                            <a href="/vendor-rfq/verify-quote/{{ pq.pk }}/"
-                               class="btn btn-primary btn-sm">
-                                <i class="fas fa-eye"></i> Verify Quote
+                        {% if email.parsed_rfq %}
+                            <a href="/rfq/{{ email.parsed_rfq.pk }}/" style="color:#3b82f6;font-weight:600;text-decoration:none;">
+                                {{ email.parsed_rfq.rfq_number }}
+                            </a>
+                        {% elif email.linked_inquiry and email.linked_inquiry.parsed_rfq %}
+                            <a href="/rfq/{{ email.linked_inquiry.parsed_rfq.pk }}/" style="color:#6366f1;font-weight:600;text-decoration:none;">
+                                {{ email.linked_inquiry.parsed_rfq.rfq_number }}
                             </a>
                         {% else %}
-                            <!-- Customer inquiry -->
-                            <a href="/email/verify/{{ email.id }}/"
-                               class="btn btn-primary btn-sm">
-                                <i class="fas fa-eye"></i> Review
-                            </a>
+                            <span style="color:#94a3b8;">—</span>
                         {% endif %}
+                    </td>
+                    <td style="font-size:13px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                        {{ email.subject|truncatechars:58 }}
+                    </td>
+                    <td>
+                        {% if email.status == 'parse_failed' %}
+                            <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:11px;">
+                                <i class="fas fa-exclamation-triangle"></i> Failed
+                            </span>
+                        {% elif email.parsed_data and email.parsed_data.raw_parsed.lines %}
+                            <span class="badge badge-approved">
+                                {{ email.parsed_data.raw_parsed.lines|length }}&nbsp;Lines
+                            </span>
+                        {% else %}
+                            <span style="color:#94a3b8;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if email.status == 'parse_failed' %}
+                            <span style="font-size:11px;color:#ef4444;font-weight:600;">Manual needed</span>
+                        {% else %}
+                            <span style="font-size:11px;color:#10b981;">AI parsed</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:12px;color:#64748b;white-space:nowrap;">{{ email.received_at|date:"d M H:i" }}</td>
+                    <td style="text-align:right;padding-right:16px;">
+                        <a href="/email/verify/{{ email.id }}/" class="btn btn-primary btn-sm" style="min-width:86px;">
+                            <i class="fas fa-eye"></i>&nbsp;Review
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:32px;color:#64748b;">
+                        <i class="fas fa-check-circle" style="color:#10b981;margin-right:6px;"></i>
+                        No vendor RFQ replies pending.
                     </td>
                 </tr>
                 {% endfor %}
@@ -127,70 +177,100 @@
         </table>
     </div>
 </div>
-{% endif %}
 
-<!-- Accounts + Email Log (existing layout) -->
-<div style="display:grid;grid-template-columns:1fr 2fr;gap:20px;align-items:start;">
+{# ═════════════════ SECTION 3 — ACCOUNTS + EMAIL LOG ═════════════════════ #}
+<div style="display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start;">
 
+    {# ── Email Accounts ─────────────────────────────────────────────────── #}
     <div class="card">
         <div class="card-header"><h2>Email Accounts</h2></div>
-        <div class="card-body" style="padding:0;">
+        <div style="padding:0;">
             {% for account in accounts %}
-            <div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;">
-                <div>
-                    <div style="font-weight:600;font-size:13px;">{{ account.name }}</div>
-                    <div style="font-size:12px;color:#64748b;">{{ account.email }}</div>
-                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
-                        {% if account.use_oauth2 %}
-                            <i class="fab fa-google" style="color:#4285f4;"></i> Gmail OAuth2
-                        {% else %}
-                            IMAP: {{ account.imap_host }}:{{ account.imap_port }}
+            <div style="padding:14px 16px;border-bottom:1px solid #f1f5f9;
+                {% if active_account_id == account.pk %}background:#eff6ff;border-left:3px solid #3b82f6;{% endif %}">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:10px;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:600;font-size:13px;margin-bottom:2px;">{{ account.name }}</div>
+                        <div style="font-size:12px;color:#64748b;margin-bottom:2px;">{{ account.email }}</div>
+                        <div style="font-size:11px;color:#94a3b8;">
+                            {% if account.use_oauth2 %}
+                                <i class="fab fa-google" style="color:#4285f4;"></i> Gmail OAuth2
+                            {% else %}
+                                <i class="fas fa-server"></i> IMAP: {{ account.imap_host }}:{{ account.imap_port }}
+                            {% endif %}
+                        </div>
+                        {% if account.last_fetched_at %}
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+                            Last synced: {{ account.last_fetched_at|date:"d M H:i" }}
+                        </div>
                         {% endif %}
                     </div>
-                    {% if account.last_fetched_at %}
-                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
-                        Last fetched: {{ account.last_fetched_at|date:"d M H:i" }}
-                    </div>
-                    {% endif %}
+                    <span class="badge badge-approved" style="white-space:nowrap;flex-shrink:0;">Active</span>
                 </div>
-                <span class="badge badge-approved">Active</span>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm"
+                            onclick="fetchAccountEmails({{ account.pk }}, this)"
+                            id="syncBtn-{{ account.pk }}"
+                            {% if not account.use_oauth2 %}disabled title="IMAP sync not supported yet"{% endif %}
+                            style="flex:1;">
+                        <i class="fas fa-sync-alt" id="syncIcon-{{ account.pk }}"></i>
+                        <span id="syncLabel-{{ account.pk }}">Sync</span>
+                    </button>
+                    <a href="?account={{ account.pk }}"
+                       class="btn btn-sm {% if active_account_id == account.pk %}btn-primary{% else %}btn-secondary{% endif %}"
+                       style="flex:1;text-align:center;">
+                        <i class="fas fa-list"></i> Log
+                    </a>
+                </div>
             </div>
             {% empty %}
-            <div style="padding:24px;text-align:center;color:#64748b;font-size:13px;">
+            <div style="padding:32px;text-align:center;color:#64748b;font-size:13px;">
                 <i class="fas fa-envelope" style="font-size:24px;color:#cbd5e1;display:block;margin-bottom:8px;"></i>
                 No email accounts configured.<br>
                 <a href="/email/oauth/start/" style="color:#3b82f6;">Connect Gmail →</a>
             </div>
             {% endfor %}
         </div>
-        {% if accounts %}
         <div style="padding:12px 16px;border-top:1px solid #e2e8f0;display:flex;flex-direction:column;gap:8px;">
             <a href="/email/oauth/start/" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
-                <i class="fab fa-google"></i> Connect Gmail
+                <i class="fab fa-google"></i>&nbsp;Connect Gmail
             </a>
             <a href="/email/accounts/create/" class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;">
-                <i class="fas fa-server"></i> Add IMAP Account
+                <i class="fas fa-server"></i>&nbsp;Add IMAP Account
             </a>
         </div>
-        {% endif %}
     </div>
 
+    {# ── Email Log ──────────────────────────────────────────────────────── #}
     <div class="card">
         <div class="card-header">
-            <h2>Email Log</h2>
-            <a href="/email/parse/" class="btn btn-sm btn-primary">
-                <i class="fas fa-magic"></i> AI Parse Email
-            </a>
+            <h2>
+                Email Log
+                {% if active_account_id %}
+                    {% for acc in accounts %}{% if acc.pk == active_account_id %}
+                    <span style="font-size:12px;font-weight:400;color:#3b82f6;margin-left:6px;">— {{ acc.name }}</span>
+                    {% endif %}{% endfor %}
+                {% endif %}
+            </h2>
+            <div style="display:flex;gap:8px;align-items:center;">
+                {% if active_account_id %}
+                <a href="/email/" class="btn btn-secondary btn-sm"><i class="fas fa-times"></i> Clear Filter</a>
+                {% endif %}
+                <a href="/email/parse/" class="btn btn-primary btn-sm">
+                    <i class="fas fa-magic"></i>&nbsp;AI Parse Email
+                </a>
+            </div>
         </div>
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
-                        <th>Direction</th>
+                        <th>Dir</th>
+                        <th>Type</th>
                         <th>From</th>
                         <th>Subject</th>
                         <th>Status</th>
-                        <th>RFQ</th>
+                        <th>RFQ / Link</th>
                         <th>Received</th>
                     </tr>
                 </thead>
@@ -199,39 +279,65 @@
                     <tr>
                         <td>
                             {% if email.direction == 'inbound' %}
-                                <span class="badge badge-sent"><i class="fas fa-arrow-down"></i> In</span>
+                                <span class="badge badge-sent" style="font-size:10px;"><i class="fas fa-arrow-down"></i>&nbsp;In</span>
                             {% else %}
-                                <span class="badge badge-closed"><i class="fas fa-arrow-up"></i> Out</span>
+                                <span class="badge badge-closed" style="font-size:10px;"><i class="fas fa-arrow-up"></i>&nbsp;Out</span>
                             {% endif %}
                         </td>
-                        <td style="font-size:12px;">{{ email.from_address|truncatechars:28 }}</td>
+                        {# ── TYPE BADGE — NEW COLUMN ── #}
+                        <td>
+                            {% if email.email_type == 'new_inquiry' %}
+                                <span style="font-size:11px;font-weight:600;color:#d97706;background:#fef3c7;padding:2px 7px;border-radius:4px;white-space:nowrap;">
+                                    <i class="fas fa-envelope-open-text"></i> New
+                                </span>
+                            {% elif email.email_type == 'rfq_reply' %}
+                                <span style="font-size:11px;font-weight:600;color:#2563eb;background:#dbeafe;padding:2px 7px;border-radius:4px;white-space:nowrap;">
+                                    <i class="fas fa-reply"></i> Reply
+                                </span>
+                            {% elif email.email_type == 'vendor_reply' %}
+                                <span style="font-size:11px;font-weight:600;color:#065f46;background:#d1fae5;padding:2px 7px;border-radius:4px;white-space:nowrap;">
+                                    <i class="fas fa-truck"></i> Vendor
+                                </span>
+                            {% else %}
+                                <span style="font-size:11px;color:#94a3b8;">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="font-size:12px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            {{ email.display_from|truncatechars:26 }}
+                        </td>
                         <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">
-                            {{ email.subject|truncatechars:55 }}
+                            {{ email.subject|truncatechars:50 }}
                         </td>
                         <td>
-                            <span class="badge badge-{{ email.status }}">
-                                {{ email.get_status_display }}
-                            </span>
+                            {% if email.status == 'parse_failed' %}
+                                <span class="badge" style="background:#fee2e2;color:#991b1b;font-size:11px;">Parse Failed</span>
+                            {% else %}
+                                <span class="badge badge-{{ email.status }}">{{ email.get_status_display }}</span>
+                            {% endif %}
                         </td>
                         <td>
                             {% if email.parsed_rfq %}
-                                <a href="/rfq/{{ email.parsed_rfq_id }}/" style="color:#3b82f6;font-weight:600;text-decoration:none;">
+                                <a href="/rfq/{{ email.parsed_rfq.pk }}/" style="color:#3b82f6;font-weight:600;text-decoration:none;font-size:12px;">
                                     {{ email.parsed_rfq.rfq_number }}
                                 </a>
-                            {% elif email.status == 'parsed' %}
-                                <a href="/email/verify/{{ email.id }}/" style="color:#f59e0b;font-size:12px;">
+                            {% elif email.linked_inquiry %}
+                                <a href="/email/verify/{{ email.linked_inquiry.pk }}/" style="color:#6366f1;font-size:11px;" title="View original inquiry">
+                                    ↑ Origin
+                                </a>
+                            {% elif email.status in 'parsed,parse_failed' %}
+                                <a href="/email/verify/{{ email.pk }}/" style="color:#f59e0b;font-size:12px;font-weight:500;">
                                     Review →
                                 </a>
                             {% else %}
                                 <span style="color:#94a3b8;">—</span>
                             {% endif %}
                         </td>
-                        <td style="font-size:12px;color:#64748b;">{{ email.received_at|date:"d M H:i" }}</td>
+                        <td style="font-size:12px;color:#64748b;white-space:nowrap;">{{ email.received_at|date:"d M H:i" }}</td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6" style="text-align:center;padding:32px;color:#64748b;">
-                            No emails logged yet. Click <strong>Fetch Emails</strong> to start.
+                        <td colspan="7" style="text-align:center;padding:32px;color:#64748b;">
+                            No emails logged yet.
                         </td>
                     </tr>
                     {% endfor %}
@@ -240,78 +346,52 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
 <script>
-async function fetchEmails() {
-    const btn = document.getElementById('fetchBtn');
-    const icon = document.getElementById('fetchIcon');
-    const label = document.getElementById('fetchLabel');
-
-    btn.disabled = true;
+async function fetchAccountEmails(accountId, btnEl) {
+    const icon  = document.getElementById(`syncIcon-${accountId}`);
+    const label = document.getElementById(`syncLabel-${accountId}`);
+    btnEl.disabled = true;
     icon.className = 'fas fa-spinner fa-spin';
-    label.textContent = 'Fetching...';
-
+    label.textContent = 'Syncing…';
     try {
-        const resp = await fetch('/email/fetch/', {
+        const resp = await fetch(`/email/fetch/${accountId}/`, {
             method: 'POST',
-            headers: {'X-CSRFToken': '{{ csrf_token }}'},
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' },
         });
         const data = await resp.json();
-
-        if (data.error) {
-            showToast(data.error, 'error');
-            return;
-        }
-
-        if (data.errors && data.errors.length) {
-            showToast('Errors: ' + data.errors.join(', '), 'error');
-        }
-
-        const { fetched, parsed, irrelevant } = data;
-
+        if (data.error) { showToast(data.error, 'error'); return; }
+        const { fetched, parsed, parse_failed } = data;
         if (fetched === 0) {
             showToast('No new emails found.', 'info');
-        } else if (parsed > 0) {
-            showToast(
-                `${fetched} email${fetched > 1 ? 's' : ''} fetched — ${parsed} ready for review.`,
-                'success'
-            );
-            setTimeout(() => location.reload(), 1800);
         } else {
-            showToast(
-                `${fetched} email${fetched > 1 ? 's' : ''} fetched, ${irrelevant} not relevant.`,
-                'info'
-            );
+            let msg = `${fetched} email${fetched > 1 ? 's' : ''} fetched`;
+            if (parsed)      msg += ` — ${parsed} AI parsed`;
+            if (parse_failed) msg += ` — ${parse_failed} need manual entry`;
+            showToast(msg, parsed > 0 ? 'success' : 'warning');
+            setTimeout(() => window.location.href = `/email/?account=${accountId}`, 1600);
         }
-    } catch (e) {
-        showToast('Fetch failed: ' + e.message, 'error');
+    } catch(e) {
+        showToast('Sync failed: ' + e.message, 'error');
     } finally {
-        btn.disabled = false;
+        btnEl.disabled = false;
         icon.className = 'fas fa-sync-alt';
-        label.textContent = 'Fetch Emails';
+        label.textContent = 'Sync';
     }
 }
 
 function showToast(msg, type = 'info') {
-    const colors = {
-        success: '#10b981',
-        error: '#ef4444',
-        info: '#3b82f6',
-    };
+    const colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6', warning:'#f59e0b' };
     const t = document.createElement('div');
-    t.style.cssText = `
-        position:fixed;bottom:24px;right:24px;
-        background:${colors[type]};color:#fff;
-        padding:12px 20px;border-radius:8px;
-        font-size:13px;z-index:9999;
-        box-shadow:0 4px 12px rgba(0,0,0,0.2);
-        max-width:320px;line-height:1.4;
-    `;
+    t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${colors[type]||colors.info};
+        color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999;
+        box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:340px;line-height:1.4;`;
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(() => t.remove(), 4000);
+    setTimeout(() => { t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),300); }, 4000);
 }
 </script>
 {% endblock %}
