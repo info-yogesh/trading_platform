@@ -2,7 +2,9 @@
 {% block title %}
     {% if email_log.email_type == 'new_inquiry' %}Review Inquiry
     {% elif email_log.email_type == 'vendor_reply' %}Review Vendor Reply
-    {% else %}Review Email{% endif %} — AeroFriend
+    {% elif email_log.email_type == 'rfq_reply' %}Review RFQ Reply
+    {% else %}Review Email
+    {% endif %} — AeroFriend
 {% endblock %}
 {% block nav_email %}active{% endblock %}
 {% block page_title %}
@@ -23,60 +25,55 @@
 
 {% block extra_css %}
 <style>
-/* ── Line items table ─────────────────────────────── */
 .lines-table { width:100%; border-collapse:collapse; font-size:13px; }
 .lines-table th {
-    padding:7px 10px; background:#f8fafc; font-size:11px; color:#64748b;
-    text-transform:uppercase; border-bottom:2px solid #e2e8f0; text-align:left;
-    white-space:nowrap;
+    padding:8px 10px; background:#f8fafc; font-size:11px; color:#64748b;
+    text-transform:uppercase; border-bottom:2px solid #e2e8f0; text-align:left; white-space:nowrap;
 }
 .lines-table td { padding:4px 6px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
 .lines-table tr:hover td { background:#fafafa; }
 .line-input {
     border:1px solid #e2e8f0; border-radius:5px; padding:5px 8px;
-    font-size:12px; width:100%; box-sizing:border-box;
-    transition:border-color .15s;
+    font-size:12px; width:100%; box-sizing:border-box; transition:border-color .15s; background:#fff;
 }
 .line-input:focus { border-color:#3b82f6; outline:none; box-shadow:0 0 0 2px rgba(59,130,246,.15); }
-.line-input.missing { border-color:#ef4444; background:#fff5f5; }
-.del-row-btn { cursor:pointer; color:#ef4444; padding:4px 6px; border-radius:4px; border:none; background:none; }
+.line-input.missing { border-color:#ef4444 !important; background:#fff5f5; }
+.del-row-btn {
+    cursor:pointer; color:#ef4444; padding:4px 8px; border-radius:4px;
+    border:none; background:none; font-size:13px;
+}
 .del-row-btn:hover { background:#fee2e2; }
-
-/* ── Parse status banner ──────────────────────────── */
-.parse-failed-banner {
-    background:#fff7ed; border:1px solid #fed7aa; border-radius:8px;
-    padding:12px 16px; margin-bottom:16px; display:flex; align-items:flex-start; gap:10px;
-}
-.parse-ok-banner {
-    background:#f0fdf4; border:1px solid #a7f3d0; border-radius:8px;
-    padding:12px 16px; margin-bottom:16px; display:flex; align-items:center; gap:10px;
-}
-
-/* ── Original inquiry panel ───────────────────────── */
-.original-panel { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:14px; margin-bottom:16px; }
-.original-panel h4 { font-size:12px; text-transform:uppercase; color:#94a3b8; margin:0 0 10px; }
-
-/* ── Classification badge ─────────────────────────── */
 .type-badge {
     display:inline-flex; align-items:center; gap:5px;
-    font-size:12px; font-weight:600; padding:3px 10px; border-radius:20px;
-    cursor:pointer; user-select:none;
+    font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px;
+    cursor:pointer; user-select:none; border:none;
 }
-.type-new     { background:#fef3c7; color:#d97706; }
-.type-reply   { background:#dbeafe; color:#2563eb; }
-.type-vendor  { background:#d1fae5; color:#065f46; }
-.type-other   { background:#f1f5f9; color:#64748b; }
+.type-new    { background:#fef3c7; color:#d97706; }
+.type-reply  { background:#dbeafe; color:#2563eb; }
+.type-vendor { background:#d1fae5; color:#065f46; }
+.type-other  { background:#f1f5f9; color:#64748b; }
+.modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+    z-index:1000; align-items:center; justify-content:center;
+}
+.modal-box {
+    background:#fff; border-radius:10px; padding:24px;
+    width:380px; max-width:92vw; box-shadow:0 8px 32px rgba(0,0,0,.2);
+}
 </style>
 {% endblock %}
 
 {% block content %}
 
-{# ═══════════════════════ CLASSIFICATION ROW ═══════════════════════════════ #}
+{# ── Classification + meta row ──────────────────────────────────────────── #}
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap;">
 
-    {# Type badge — click to change #}
-    <span class="type-badge type-{% if email_log.email_type == 'new_inquiry' %}new{% elif email_log.email_type == 'rfq_reply' %}reply{% elif email_log.email_type == 'vendor_reply' %}vendor{% else %}other{% endif %}"
-          onclick="openReclassifyModal()" title="Click to override classification">
+    <button class="type-badge
+        {% if email_log.email_type == 'new_inquiry' %}type-new
+        {% elif email_log.email_type == 'rfq_reply' %}type-reply
+        {% elif email_log.email_type == 'vendor_reply' %}type-vendor
+        {% else %}type-other{% endif %}"
+        onclick="openReclassifyModal()" title="Click to override classification" type="button">
         {% if email_log.email_type == 'new_inquiry' %}
             <i class="fas fa-envelope-open-text"></i> New Inquiry
         {% elif email_log.email_type == 'rfq_reply' %}
@@ -86,16 +83,15 @@
         {% else %}
             <i class="fas fa-question"></i> Other
         {% endif %}
-        <i class="fas fa-caret-down" style="font-size:10px;opacity:0.6;"></i>
-    </span>
+        <i class="fas fa-caret-down" style="font-size:10px;opacity:.6;"></i>
+    </button>
 
     {% if email_log.linked_inquiry %}
     <span style="font-size:12px;color:#64748b;">
         <i class="fas fa-link" style="color:#94a3b8;"></i>
-        In reply to:
-        <a href="/email/verify/{{ email_log.linked_inquiry.pk }}/"
+        In reply to:&nbsp;<a href="/email/verify/{{ email_log.linked_inquiry.pk }}/"
            style="color:#3b82f6;font-weight:600;">
-            {{ email_log.linked_inquiry.subject|truncatechars:50 }}
+            {{ email_log.linked_inquiry.subject|truncatechars:55 }}
         </a>
     </span>
     {% endif %}
@@ -103,9 +99,7 @@
     {% if email_log.parsed_rfq %}
     <span style="font-size:12px;color:#64748b;">
         <i class="fas fa-file-alt" style="color:#94a3b8;"></i>
-        Linked RFQ:
-        <a href="/rfq/{{ email_log.parsed_rfq.pk }}/"
-           style="color:#3b82f6;font-weight:600;">
+        Linked RFQ:&nbsp;<a href="/rfq/{{ email_log.parsed_rfq.pk }}/" style="color:#3b82f6;font-weight:600;">
             {{ email_log.parsed_rfq.rfq_number }}
         </a>
         <span class="badge badge-{{ email_log.parsed_rfq.status }}" style="font-size:10px;margin-left:4px;">
@@ -115,82 +109,91 @@
     {% endif %}
 
     <span style="margin-left:auto;font-size:11px;color:#94a3b8;">
-        {{ email_log.account.name }} &bull; {{ email_log.received_at|date:"d M Y H:i" }}
+        {% if email_log.account %}{{ email_log.account.name }} &bull; {% endif %}
+        {{ email_log.received_at|date:"d M Y H:i" }}
     </span>
 </div>
 
-{# ═══════════════════════ PARSE STATUS BANNER ══════════════════════════════ #}
+{# ── Parse status banner ────────────────────────────────────────────────── #}
 {% if ai_failed %}
-<div class="parse-failed-banner">
-    <i class="fas fa-exclamation-triangle" style="color:#f97316;font-size:18px;flex-shrink:0;margin-top:1px;"></i>
+<div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;
+            padding:12px 16px;margin-bottom:16px;display:flex;align-items:flex-start;gap:10px;">
+    <i class="fas fa-exclamation-triangle" style="color:#f97316;font-size:17px;flex-shrink:0;margin-top:2px;"></i>
     <div style="flex:1;">
         <div style="font-weight:600;color:#c2410c;font-size:13px;margin-bottom:4px;">
             AI Parsing Failed — Manual Entry Required
         </div>
         <div style="font-size:12px;color:#78350f;">
             The AI could not extract structured line items from this email.
-            You can enter the lines manually below, or
-            <button type="button" onclick="retriggerParse()" class="btn btn-secondary btn-sm"
-                    style="padding:2px 10px;font-size:12px;margin-left:4px;" id="retriggerBtn">
+            Enter lines manually in the table below, or
+            <button type="button" onclick="retriggerParse()" id="retriggerBtn"
+                    class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;margin-left:4px;">
                 <i class="fas fa-redo" id="retriggerIcon"></i>&nbsp;Retry AI Parse
             </button>
         </div>
     </div>
 </div>
 {% else %}
-<div class="parse-ok-banner">
+<div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:8px;
+            padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">
     <i class="fas fa-robot" style="color:#10b981;font-size:16px;"></i>
-    <div style="font-size:13px;color:#065f46;">
+    <div style="font-size:13px;color:#065f46;flex:1;">
         <strong>AI parsed successfully.</strong>
-        Review and edit the lines below before confirming.
-        &nbsp;&mdash;&nbsp;
-        <button type="button" onclick="retriggerParse()" class="btn btn-secondary btn-sm"
-                style="padding:2px 10px;font-size:12px;" id="retriggerBtn">
-            <i class="fas fa-redo" id="retriggerIcon"></i>&nbsp;Re-run AI
-        </button>
+        Review and correct the lines below before confirming.
     </div>
+    <button type="button" onclick="retriggerParse()" id="retriggerBtn"
+            class="btn btn-secondary btn-sm" style="padding:2px 10px;font-size:12px;">
+        <i class="fas fa-redo" id="retriggerIcon"></i>&nbsp;Re-run AI
+    </button>
 </div>
 {% endif %}
 
-{# ═══════════════════════ MAIN 2-COLUMN GRID ═══════════════════════════════ #}
-<div style="display:grid;grid-template-columns:{% if original_email %}1fr 1.8fr{% else %}1fr 2fr{% endif %};gap:20px;align-items:start;">
+{# ── Main 2-column layout ───────────────────────────────────────────────── #}
+<div style="display:grid;
+    grid-template-columns:{% if original_email %}minmax(280px,1fr) minmax(0,1.9fr){% else %}minmax(280px,1fr) minmax(0,2.2fr){% endif %};
+    gap:20px;align-items:start;">
 
-{# ── LEFT COLUMN: Email content (+ original inquiry if reply) ─────────────── #}
-<div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:70px;">
+{# ════════ LEFT: Email body + optional original inquiry ═══════════════════ #}
+<div style="display:flex;flex-direction:column;gap:16px;position:sticky;top:70px;
+            max-height:calc(100vh - 90px);overflow-y:auto;">
 
-    {# Original inquiry context — only shown for rfq_reply / vendor_reply #}
     {% if original_email %}
     <div class="card">
         <div class="card-header" style="background:#eff6ff;">
-            <h2 style="font-size:13px;color:#1d4ed8;display:flex;align-items:center;gap:6px;">
-                <i class="fas fa-history"></i> Original Inquiry
+            <h2 style="font-size:13px;color:#1d4ed8;">
+                <i class="fas fa-history"></i>&nbsp;Original Inquiry
             </h2>
-            <a href="/email/verify/{{ original_email.pk }}/" style="font-size:11px;color:#3b82f6;">
-                Open full →
-            </a>
+            <a href="/email/verify/{{ original_email.pk }}/" style="font-size:11px;color:#3b82f6;">Open →</a>
         </div>
         <div class="card-body" style="padding:12px 14px;">
-            <div style="font-size:12px;color:#64748b;margin-bottom:4px;"><strong>From:</strong> {{ original_email.display_from }}</div>
-            <div style="font-size:12px;color:#64748b;margin-bottom:4px;"><strong>Subject:</strong> {{ original_email.subject }}</div>
-            <div style="font-size:12px;color:#64748b;margin-bottom:8px;"><strong>Received:</strong> {{ original_email.received_at|date:"d M Y H:i" }}</div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:3px;">
+                <strong>From:</strong> {{ original_email.display_from }}
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:3px;">
+                <strong>Subject:</strong> {{ original_email.subject }}
+            </div>
+            <div style="font-size:12px;color:#64748b;margin-bottom:8px;">
+                <strong>Received:</strong> {{ original_email.received_at|date:"d M Y H:i" }}
+            </div>
 
-            {# Thread replies list #}
             {% if thread_emails %}
-            <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;font-weight:600;">Thread History</div>
+            <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;margin-bottom:5px;">
+                Thread
+            </div>
             {% for t in thread_emails %}
-            <div style="font-size:11px;padding:4px 8px;border-radius:4px;background:#f8fafc;margin-bottom:3px;
-                        border-left:3px solid {% if t.direction == 'inbound' %}#3b82f6{% else %}#10b981{% endif %};">
-                <span style="color:#64748b;">{{ t.received_at|date:"d M H:i" }}</span>
-                &nbsp;
-                <span style="font-weight:500;">{{ t.subject|truncatechars:40 }}</span>
+            <div style="font-size:11px;padding:3px 8px;border-radius:4px;background:#f8fafc;
+                        margin-bottom:2px;border-left:3px solid
+                        {% if t.direction == 'inbound' %}#3b82f6{% else %}#10b981{% endif %};">
+                <span style="color:#94a3b8;">{{ t.received_at|date:"d M H:i" }}</span>
+                &nbsp;<span style="font-weight:500;">{{ t.subject|truncatechars:38 }}</span>
             </div>
             {% endfor %}
             {% endif %}
 
-            {# Original inquiry lines for reference #}
             {% if original_lines %}
             <div style="margin-top:10px;">
-                <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;font-weight:600;margin-bottom:6px;">
+                <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;
+                            font-weight:600;margin-bottom:5px;">
                     Original Lines ({{ original_lines|length }})
                 </div>
                 <table style="width:100%;border-collapse:collapse;font-size:11px;">
@@ -204,9 +207,12 @@
                     <tbody>
                         {% for line in original_lines %}
                         <tr>
-                            <td style="padding:3px 6px;border-bottom:1px solid #f1f5f9;font-weight:600;font-family:monospace;">{{ line.pn }}</td>
+                            <td style="padding:3px 6px;border-bottom:1px solid #f1f5f9;
+                                       font-weight:600;font-family:monospace;">{{ line.pn }}</td>
                             <td style="padding:3px 6px;border-bottom:1px solid #f1f5f9;">{{ line.qty }}</td>
-                            <td style="padding:3px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;">{{ line.cd|default:"—" }}</td>
+                            <td style="padding:3px 6px;border-bottom:1px solid #f1f5f9;color:#64748b;">
+                                {{ line.cd|default:"—" }}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -217,7 +223,6 @@
     </div>
     {% endif %}
 
-    {# Current email body #}
     <div class="card">
         <div class="card-header">
             <h2>Email</h2>
@@ -228,47 +233,44 @@
             {% endif %}
         </div>
         <div class="card-body">
-            <div style="margin-bottom:10px;">
+            <div style="margin-bottom:8px;">
                 <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:2px;">From</div>
                 <div style="font-size:13px;word-break:break-all;">{{ email_log.from_address }}</div>
             </div>
-            <div style="margin-bottom:10px;">
+            <div style="margin-bottom:8px;">
                 <div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:2px;">Subject</div>
                 <div style="font-size:13px;font-weight:600;">{{ email_log.subject }}</div>
             </div>
             <div style="font-size:11px;color:#94a3b8;margin-bottom:10px;">
                 {{ email_log.received_at|date:"d M Y H:i" }}
-                {% if email_log.account %}&nbsp;&bull;&nbsp;{{ email_log.account.name }}{% endif %}
             </div>
             <div style="background:#f8fafc;border-radius:6px;padding:12px;
                         font-size:12px;font-family:monospace;white-space:pre-wrap;
-                        max-height:340px;overflow-y:auto;border:1px solid #e2e8f0;line-height:1.6;">{{ email_log.body_text }}</div>
+                        max-height:320px;overflow-y:auto;border:1px solid #e2e8f0;line-height:1.6;">{{ email_log.body_text }}</div>
         </div>
     </div>
 
 </div>{# end left column #}
 
-{# ── RIGHT COLUMN: Line items editor + action bar ─────────────────────────── #}
+{# ════════ RIGHT: Line items + action bar ════════════════════════════════ #}
 <div style="display:flex;flex-direction:column;gap:16px;">
 
-    {# Line items editor card #}
     <div class="card">
         <div class="card-header">
             <h2>
-                {% if email_log.email_type == 'vendor_reply' %}
-                    Vendor Quote Lines
-                {% else %}
-                    RFQ Line Items
-                {% endif %}
+                {% if email_log.email_type == 'vendor_reply' %}Vendor Quote Lines
+                {% else %}RFQ Line Items{% endif %}
             </h2>
             <div style="display:flex;gap:8px;align-items:center;">
-                <span id="aiStatusBadge"
-                      style="font-size:11px;padding:3px 8px;border-radius:4px;
-                             {% if ai_failed %}background:#fee2e2;color:#991b1b;{% else %}background:#d1fae5;color:#065f46;{% endif %}">
+                <span id="aiStatusBadge" style="font-size:11px;padding:3px 8px;border-radius:4px;
+                    {% if ai_failed %}background:#fee2e2;color:#991b1b;
+                    {% else %}background:#d1fae5;color:#065f46;{% endif %}">
                     {% if ai_failed %}
-                        <i class="fas fa-exclamation-triangle"></i>&nbsp;AI failed
+                        <i class="fas fa-exclamation-triangle"></i>&nbsp;AI failed — enter manually
                     {% else %}
-                        <i class="fas fa-robot"></i>&nbsp;AI extracted {{ parsed.raw_parsed.lines|length|default:0 }} line{{ parsed.raw_parsed.lines|length|default:0|pluralize }}
+                        <i class="fas fa-robot"></i>&nbsp;AI extracted
+                        {{ parsed.raw_parsed.lines|length|default:"0" }}
+                        line{{ parsed.raw_parsed.lines|length|default:"0"|pluralize }}
                     {% endif %}
                 </span>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="addLine()">
@@ -278,73 +280,69 @@
         </div>
 
         <div style="overflow-x:auto;">
-            <table class="lines-table" id="linesTable">
+            <table class="lines-table">
                 <thead>
                     <tr>
-                        <th style="width:30px;">#</th>
-                        <th style="min-width:130px;">Part Number *</th>
-                        <th style="min-width:200px;">Description</th>
-                        <th style="min-width:80px;">Qty *</th>
-                        <th style="min-width:90px;">Condition</th>
+                        <th style="width:28px;">#</th>
+                        <th style="min-width:125px;">Part Number *</th>
+                        <th style="min-width:190px;">Description</th>
+                        <th style="min-width:72px;">Qty *</th>
+                        <th style="min-width:88px;">Condition</th>
                         {% if email_log.email_type == 'vendor_reply' %}
-                        <th style="min-width:90px;">Unit Price</th>
-                        <th style="min-width:90px;">Lead Time</th>
+                        <th style="min-width:88px;">Unit Price</th>
+                        <th style="min-width:88px;">Lead Time</th>
                         {% endif %}
-                        <th style="width:36px;"></th>
+                        <th style="width:32px;"></th>
                     </tr>
                 </thead>
-                <tbody id="linesBody">
-                    {# Populated by JS below #}
-                </tbody>
+                <tbody id="linesBody"></tbody>
             </table>
         </div>
 
-        <div style="padding:10px 14px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:8px;">
-            <span id="lineCount" style="font-size:12px;color:#64748b;"></span>
+        <div style="padding:10px 14px;border-top:1px solid #f1f5f9;display:flex;align-items:center;gap:10px;">
+            <span id="lineCountLabel" style="font-size:12px;color:#64748b;"></span>
             <button type="button" class="btn btn-secondary btn-sm" onclick="addLine()">
                 <i class="fas fa-plus"></i> Add Row
             </button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="clearAllLines()"
-                    style="color:#ef4444;">
+            <button type="button" class="btn btn-secondary btn-sm"
+                    onclick="clearAllLines()" style="color:#ef4444;">
                 <i class="fas fa-trash"></i> Clear All
             </button>
         </div>
     </div>
 
-    {# Action card #}
     <div class="card">
-        <div class="card-header"><h2>Actions</h2></div>
+        <div class="card-header"><h2>Confirm &amp; Submit</h2></div>
         <div class="card-body">
-
             {% if email_log.email_type == 'vendor_reply' %}
             <p style="font-size:13px;color:#64748b;margin-bottom:14px;">
                 Confirm the vendor-quoted lines to update
                 {% if email_log.parsed_rfq %}
-                <a href="/rfq/{{ email_log.parsed_rfq.pk }}/" style="color:#3b82f6;font-weight:600;">
-                    {{ email_log.parsed_rfq.rfq_number }}</a>.
+                    <a href="/rfq/{{ email_log.parsed_rfq.pk }}/"
+                       style="color:#3b82f6;font-weight:600;">{{ email_log.parsed_rfq.rfq_number }}</a>.
                 {% elif email_log.linked_inquiry and email_log.linked_inquiry.parsed_rfq %}
-                <a href="/rfq/{{ email_log.linked_inquiry.parsed_rfq.pk }}/" style="color:#3b82f6;font-weight:600;">
-                    {{ email_log.linked_inquiry.parsed_rfq.rfq_number }}</a>.
+                    <a href="/rfq/{{ email_log.linked_inquiry.parsed_rfq.pk }}/"
+                       style="color:#3b82f6;font-weight:600;">
+                       {{ email_log.linked_inquiry.parsed_rfq.rfq_number }}</a>.
                 {% else %}
                     the associated RFQ.
                 {% endif %}
             </p>
             {% else %}
             <p style="font-size:13px;color:#64748b;margin-bottom:14px;">
-                Confirm the extracted line items below to create an
-                <strong>Inquiry</strong>.
-                From the Inquiry you can generate one or more RFQ requests.
+                Confirm the extracted lines to create an <strong>Inquiry</strong>.
+                From there you can generate one or more RFQ requests to vendors.
             </p>
             {% endif %}
 
             <form method="post" id="verifyForm">
                 {% csrf_token %}
-                <input type="hidden" name="action" id="actionField" value="confirm">
-                <input type="hidden" name="lines_json" id="linesJsonField" value="[]">
-                <input type="hidden" name="manually_entered" id="manuallyEnteredField" value="false">
+                <input type="hidden" name="action"           id="actionField"          value="confirm">
+                <input type="hidden" name="lines_json"       id="linesJsonField"       value="[]">
+                <input type="hidden" name="manually_entered" id="manuallyEnteredField"  value="false">
 
-                <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                    <button type="button" class="btn btn-primary" onclick="submitConfirm()" id="confirmBtn">
+                <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                    <button type="button" class="btn btn-primary" onclick="submitConfirm()">
                         <i class="fas fa-check"></i>
                         {% if email_log.email_type == 'vendor_reply' %}
                             Confirm Vendor Quote
@@ -357,8 +355,7 @@
                     </button>
                 </div>
 
-                {# Validation error shown inline #}
-                <div id="formError" style="display:none;margin-top:10px;padding:8px 12px;
+                <div id="formError" style="display:none;padding:8px 12px;
                      background:#fee2e2;color:#991b1b;border-radius:6px;font-size:13px;">
                     <i class="fas fa-exclamation-circle"></i>
                     <span id="formErrorMsg"></span>
@@ -370,19 +367,20 @@
 </div>{# end right column #}
 </div>{# end 2-col grid #}
 
-{# ═══════════════════════ RECLASSIFY MODAL ════════════════════════════════ #}
-<div id="reclassifyModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1000;
-     align-items:center;justify-content:center;">
-    <div style="background:#fff;border-radius:10px;padding:24px;width:380px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.2);">
-        <h3 style="font-size:15px;margin:0 0 16px;font-weight:700;">Override Email Classification</h3>
+{# ── Reclassify modal ───────────────────────────────────────────────────── #}
+<div id="reclassifyModal" class="modal-overlay">
+    <div class="modal-box">
+        <h3 style="font-size:15px;margin:0 0 12px;font-weight:700;">
+            Override Email Classification
+        </h3>
         <p style="font-size:13px;color:#64748b;margin-bottom:14px;">
             Auto-detected: <strong>{{ email_log.get_email_type_display }}</strong>.
             Select the correct type:
         </p>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">
             {% for val, label in email_type_choices %}
-            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 12px;
-                          border:1px solid #e2e8f0;border-radius:6px;font-size:13px;
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;
+                          padding:8px 12px;border:1px solid #e2e8f0;border-radius:6px;font-size:13px;
                           {% if email_log.email_type == val %}background:#eff6ff;border-color:#3b82f6;{% endif %}">
                 <input type="radio" name="reclassify_type" value="{{ val }}"
                        {% if email_log.email_type == val %}checked{% endif %}>
@@ -391,262 +389,276 @@
             {% endfor %}
         </div>
         <div style="display:flex;gap:8px;">
-            <button class="btn btn-primary btn-sm" onclick="submitReclassify()">Save Classification</button>
-            <button class="btn btn-secondary btn-sm" onclick="closeReclassifyModal()">Cancel</button>
+            <button class="btn btn-primary btn-sm" type="button" onclick="submitReclassify()">
+                Save Classification
+            </button>
+            <button class="btn btn-secondary btn-sm" type="button" onclick="closeReclassifyModal()">
+                Cancel
+            </button>
         </div>
     </div>
 </div>
 
 {% endblock %}
 
-
 {% block extra_js %}
 <script>
-// ── Raw data from Django ───────────────────────────────────────────────────
-const EMAIL_LOG_ID  = {{ email_log.id }};
-const CSRF_TOKEN    = '{{ csrf_token }}';
-const IS_VENDOR     = {{ email_log.email_type|yesno:"true,false,false" == 'vendor_reply'|yesno:"true,false" }};
-const SHOW_PRICE_COLS = '{{ email_log.email_type }}' === 'vendor_reply';
+// ── Constants ─────────────────────────────────────────────────────────────
+// All booleans derived in pure JS from simple string output — no Django
+// template filter expressions inside JS (which caused the TemplateSyntaxError).
+var EMAIL_LOG_ID    = {{ email_log.id }};
+var CSRF_TOKEN      = '{{ csrf_token }}';
+var EMAIL_TYPE      = '{{ email_log.email_type }}';
+var SHOW_PRICE_COLS = (EMAIL_TYPE === 'vendor_reply');
 
-// Seed lines from AI (or empty if failed)
-let lines = {{ parsed.raw_parsed.lines|default:"[]"|safe }};
-// If user previously confirmed lines, prefer those
+// ── Seed lines ────────────────────────────────────────────────────────────
+// Prefer confirmed lines (user previously reviewed) over raw AI output.
 {% if parsed and parsed.confirmed_lines %}
-const confirmedLines = {{ parsed.confirmed_lines|safe }};
-if (confirmedLines && confirmedLines.length) lines = confirmedLines;
+var _confirmed = {{ parsed.confirmed_lines|safe }};
+var _raw       = {{ parsed.raw_parsed.lines|default:"[]"|safe }};
+var lines = (_confirmed && _confirmed.length) ? _confirmed : _raw;
+{% elif parsed %}
+var lines = {{ parsed.raw_parsed.lines|default:"[]"|safe }};
+{% else %}
+var lines = [];
 {% endif %}
 
-// Track if any manual edits were made
-let isManual = {{ ai_failed|yesno:"true,false" }};
+// Was AI parsing skipped / failed?
+var isManual = {{ ai_failed|yesno:"true,false" }};
 
-// ── Init ────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    if (lines.length === 0) addLine();  // always start with at least one row
-    else renderLines();
+// ── Init ──────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+    if (!lines || !lines.length) {
+        lines = [emptyLine()];
+    }
+    renderLines();
 });
 
-// ── Render ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────
+function emptyLine() {
+    return { pn: '', description: '', qty: '', cd: '', unit_price: '', lead_time: '' };
+}
+
+function esc(str) {
+    return (str == null ? '' : String(str))
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+// ── Render ────────────────────────────────────────────────────────────────
 function renderLines() {
-    const tbody = document.getElementById('linesBody');
+    var tbody = document.getElementById('linesBody');
     tbody.innerHTML = '';
-    lines.forEach((line, i) => tbody.appendChild(buildRow(line, i)));
+    for (var i = 0; i < lines.length; i++) {
+        tbody.appendChild(buildRow(lines[i], i));
+    }
     updateCount();
 }
 
 function buildRow(line, i) {
-    const tr = document.createElement('tr');
+    var tr = document.createElement('tr');
 
-    const pnMissing  = !line.pn;
-    const qtyMissing = !line.qty;
+    var pnMissing  = !line.pn;
+    var qtyMissing = !line.qty;
 
-    let html = `
-        <td style="color:#94a3b8;font-size:11px;padding:4px 8px;">${i + 1}</td>
-        <td>
-            <input class="line-input ${pnMissing ? 'missing' : ''}"
-                   value="${esc(line.pn)}" placeholder="e.g. IRF540N"
-                   oninput="updateField(${i},'pn',this.value);this.classList.toggle('missing',!this.value)"
-                   style="min-width:120px;font-family:monospace;font-weight:600;">
-        </td>
-        <td>
-            <input class="line-input" value="${esc(line.description)}" placeholder="Description"
-                   oninput="updateField(${i},'description',this.value)"
-                   style="min-width:180px;">
-        </td>
-        <td>
-            <input class="line-input ${qtyMissing ? 'missing' : ''}" type="number"
-                   value="${esc(line.qty)}" placeholder="0" min="0"
-                   oninput="updateField(${i},'qty',this.value);this.classList.toggle('missing',!this.value)"
-                   style="min-width:70px;">
-        </td>
-        <td>
-            <input class="line-input" value="${esc(line.cd)}" placeholder="New/Used"
-                   oninput="updateField(${i},'cd',this.value)"
-                   style="min-width:80px;">
-        </td>`;
+    var html = '<td style="color:#94a3b8;font-size:11px;padding:6px 8px;text-align:center;">'
+             + (i + 1) + '</td>'
+             + '<td><input class="line-input' + (pnMissing ? ' missing' : '') + '"'
+             + ' value="' + esc(line.pn) + '"'
+             + ' placeholder="e.g. IRF540N"'
+             + ' oninput="setField(' + i + ',\'pn\',this.value);this.classList.toggle(\'missing\',!this.value)"'
+             + ' style="font-family:monospace;font-weight:600;"></td>'
+
+             + '<td><input class="line-input"'
+             + ' value="' + esc(line.description) + '"'
+             + ' placeholder="Description"'
+             + ' oninput="setField(' + i + ',\'description\',this.value)"></td>'
+
+             + '<td><input class="line-input' + (qtyMissing ? ' missing' : '') + '"'
+             + ' type="number" min="0"'
+             + ' value="' + esc(line.qty) + '"'
+             + ' placeholder="0"'
+             + ' oninput="setField(' + i + ',\'qty\',this.value);this.classList.toggle(\'missing\',!this.value)"></td>'
+
+             + '<td><input class="line-input"'
+             + ' value="' + esc(line.cd) + '"'
+             + ' placeholder="New / Used"'
+             + ' oninput="setField(' + i + ',\'cd\',this.value)"></td>';
 
     if (SHOW_PRICE_COLS) {
-        html += `
-        <td>
-            <input class="line-input" type="number" step="0.0001"
-                   value="${esc(line.unit_price)}" placeholder="0.0000"
-                   oninput="updateField(${i},'unit_price',this.value)"
-                   style="min-width:80px;">
-        </td>
-        <td>
-            <input class="line-input" value="${esc(line.lead_time)}" placeholder="e.g. 4 weeks"
-                   oninput="updateField(${i},'lead_time',this.value)"
-                   style="min-width:80px;">
-        </td>`;
+        html += '<td><input class="line-input" type="number" step="0.0001"'
+              + ' value="' + esc(line.unit_price) + '"'
+              + ' placeholder="0.0000"'
+              + ' oninput="setField(' + i + ',\'unit_price\',this.value)"></td>'
+              + '<td><input class="line-input"'
+              + ' value="' + esc(line.lead_time) + '"'
+              + ' placeholder="4 weeks"'
+              + ' oninput="setField(' + i + ',\'lead_time\',this.value)"></td>';
     }
 
-    html += `
-        <td>
-            <button class="del-row-btn" onclick="removeLine(${i})" title="Remove row">
-                <i class="fas fa-times"></i>
-            </button>
-        </td>`;
+    html += '<td><button class="del-row-btn" type="button" onclick="removeLine(' + i + ')" title="Remove">'
+          + '<i class="fas fa-times"></i></button></td>';
 
     tr.innerHTML = html;
     return tr;
 }
 
-function updateField(i, field, value) {
-    if (!lines[i]) return;
-    lines[i][field] = value;
-    isManual = true;
+function setField(i, field, value) {
+    if (lines[i] !== undefined) {
+        lines[i][field] = value;
+        isManual = true;
+    }
 }
 
 function updateCount() {
-    const cnt = lines.length;
-    document.getElementById('lineCount').textContent = `${cnt} line${cnt !== 1 ? 's' : ''}`;
+    var n = lines.length;
+    document.getElementById('lineCountLabel').textContent =
+        n + ' line' + (n !== 1 ? 's' : '');
 }
 
 function addLine() {
-    lines.push({ pn: '', description: '', qty: '', cd: '', unit_price: '', lead_time: '' });
+    lines.push(emptyLine());
     renderLines();
-    // Focus the new PN input
-    const rows = document.querySelectorAll('#linesBody tr');
-    const lastRow = rows[rows.length - 1];
-    if (lastRow) lastRow.querySelector('input')?.focus();
+    var rows = document.querySelectorAll('#linesBody tr');
+    var last = rows[rows.length - 1];
+    if (last) {
+        var inp = last.querySelector('input');
+        if (inp) inp.focus();
+    }
     isManual = true;
 }
 
 function removeLine(i) {
     lines.splice(i, 1);
-    if (lines.length === 0) lines.push({ pn:'', description:'', qty:'', cd:'', unit_price:'', lead_time:'' });
+    if (!lines.length) lines.push(emptyLine());
     renderLines();
     isManual = true;
 }
 
 function clearAllLines() {
-    if (!confirm('Clear all lines? You can add them manually.')) return;
-    lines = [{ pn:'', description:'', qty:'', cd:'', unit_price:'', lead_time:'' }];
+    if (!confirm('Clear all lines?')) return;
+    lines = [emptyLine()];
     renderLines();
     isManual = true;
 }
 
-// ── Submit ───────────────────────────────────────────────────────────────────
+// ── Submit ────────────────────────────────────────────────────────────────
 function submitConfirm() {
-    const valid = lines.filter(l => l.pn && l.qty);
-    if (valid.length === 0) {
+    var valid = lines.filter(function(l) { return l.pn && l.qty; });
+    if (!valid.length) {
         showFormError('At least one line with Part Number and Quantity is required.');
         return;
     }
     hideFormError();
-    document.getElementById('linesJsonField').value     = JSON.stringify(lines);
+    document.getElementById('linesJsonField').value       = JSON.stringify(lines);
     document.getElementById('manuallyEnteredField').value = isManual ? 'true' : 'false';
-    document.getElementById('actionField').value         = 'confirm';
+    document.getElementById('actionField').value          = 'confirm';
     document.getElementById('verifyForm').submit();
 }
 
 function submitSkip() {
-    if (!confirm('Mark this email as not relevant? It will be removed from the review queue.')) return;
-    document.getElementById('actionField').value = 'skip';
+    if (!confirm('Mark this email as not relevant?')) return;
+    document.getElementById('actionField').value    = 'skip';
     document.getElementById('linesJsonField').value = '[]';
     document.getElementById('verifyForm').submit();
 }
 
 function showFormError(msg) {
     document.getElementById('formErrorMsg').textContent = msg;
-    document.getElementById('formError').style.display = 'block';
+    document.getElementById('formError').style.display  = 'block';
 }
 function hideFormError() {
     document.getElementById('formError').style.display = 'none';
 }
 
-// ── AI Parse Retry (AJAX) ────────────────────────────────────────────────────
+// ── AI Retry ──────────────────────────────────────────────────────────────
 async function retriggerParse() {
-    const btn  = document.getElementById('retriggerBtn');
-    const icon = document.getElementById('retriggerIcon');
-
-    btn.disabled = true;
+    var btn  = document.getElementById('retriggerBtn');
+    var icon = document.getElementById('retriggerIcon');
+    btn.disabled   = true;
     icon.className = 'fas fa-spinner fa-spin';
 
     try {
-        const resp = await fetch(`/email/verify/${EMAIL_LOG_ID}/retrigger/`, {
-            method: 'POST',
+        var resp = await fetch('/email/verify/' + EMAIL_LOG_ID + '/retrigger/', {
+            method:  'POST',
             headers: { 'X-CSRFToken': CSRF_TOKEN },
         });
-        const data = await resp.json();
+        var data = await resp.json();
 
         if (data.lines && data.lines.length > 0) {
-            lines = data.lines;
+            lines    = data.lines;
             isManual = false;
             renderLines();
 
-            // Update AI status badge
-            const badge = document.getElementById('aiStatusBadge');
+            var badge = document.getElementById('aiStatusBadge');
             badge.style.background = '#d1fae5';
             badge.style.color      = '#065f46';
-            badge.innerHTML = `<i class="fas fa-robot"></i>&nbsp;AI extracted ${data.lines.length} line${data.lines.length > 1 ? 's' : ''}`;
+            badge.innerHTML = '<i class="fas fa-robot"></i>&nbsp;AI extracted '
+                            + data.lines.length + ' line'
+                            + (data.lines.length !== 1 ? 's' : '');
 
-            // Remove parse-failed banner if present
-            const banner = document.querySelector('.parse-failed-banner');
-            if (banner) banner.remove();
-
-            showToast(`AI extracted ${data.lines.length} line items.`, 'success');
+            showToast('AI extracted ' + data.lines.length + ' line items.', 'success');
         } else {
             showToast(
-                data.error
-                    ? `Retry failed: ${data.error}`
-                    : 'AI still could not extract lines. Please enter manually.',
+                data.error ? 'Retry failed: ' + data.error
+                           : 'AI still could not extract lines. Please enter manually.',
                 'error'
             );
         }
-    } catch(e) {
+    } catch (e) {
         showToast('Retry request failed: ' + e.message, 'error');
     } finally {
-        btn.disabled = false;
+        btn.disabled   = false;
         icon.className = 'fas fa-redo';
     }
 }
 
-// ── Reclassify modal ─────────────────────────────────────────────────────────
+// ── Reclassify modal ──────────────────────────────────────────────────────
 function openReclassifyModal() {
-    const m = document.getElementById('reclassifyModal');
-    m.style.display = 'flex';
+    document.getElementById('reclassifyModal').style.display = 'flex';
 }
 function closeReclassifyModal() {
     document.getElementById('reclassifyModal').style.display = 'none';
 }
 async function submitReclassify() {
-    const selected = document.querySelector('input[name="reclassify_type"]:checked');
+    var selected = document.querySelector('input[name="reclassify_type"]:checked');
     if (!selected) return;
     try {
-        const resp = await fetch(`/email/verify/${EMAIL_LOG_ID}/reclassify/`, {
-            method: 'POST',
+        var resp = await fetch('/email/verify/' + EMAIL_LOG_ID + '/reclassify/', {
+            method:  'POST',
             headers: { 'X-CSRFToken': CSRF_TOKEN, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email_type: selected.value }),
+            body:    JSON.stringify({ email_type: selected.value }),
         });
-        const data = await resp.json();
+        var data = await resp.json();
         if (data.email_type) {
-            showToast(`Reclassified as: ${data.display}`, 'success');
-            setTimeout(() => location.reload(), 1200);
+            showToast('Reclassified as: ' + data.display, 'success');
+            setTimeout(function() { location.reload(); }, 1200);
         } else {
             showToast(data.error || 'Reclassification failed', 'error');
         }
-    } catch(e) {
+    } catch (e) {
         showToast('Request failed: ' + e.message, 'error');
     }
     closeReclassifyModal();
 }
 
-// ── Toast ────────────────────────────────────────────────────────────────────
-function showToast(msg, type = 'info') {
-    const colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6', warning:'#f59e0b' };
-    const t = document.createElement('div');
-    t.style.cssText = `position:fixed;bottom:24px;right:24px;background:${colors[type]||'#3b82f6'};
-        color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999;
-        box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:340px;line-height:1.4;`;
+// ── Toast ─────────────────────────────────────────────────────────────────
+function showToast(msg, type) {
+    var colors = { success:'#10b981', error:'#ef4444', info:'#3b82f6', warning:'#f59e0b' };
+    var t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;right:24px;'
+        + 'background:' + (colors[type] || '#3b82f6') + ';color:#fff;'
+        + 'padding:12px 20px;border-radius:8px;font-size:13px;z-index:9999;'
+        + 'box-shadow:0 4px 16px rgba(0,0,0,.18);max-width:340px;line-height:1.4;';
     t.textContent = msg;
     document.body.appendChild(t);
-    setTimeout(()=>{ t.style.transition='opacity .3s'; t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 4000);
-}
-
-// ── Utility ──────────────────────────────────────────────────────────────────
-function esc(str) {
-    return (str || '').toString()
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    setTimeout(function() {
+        t.style.transition = 'opacity .3s';
+        t.style.opacity    = '0';
+        setTimeout(function() { t.remove(); }, 300);
+    }, 4000);
 }
 </script>
 {% endblock %}
