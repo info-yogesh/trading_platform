@@ -130,7 +130,7 @@ def vendor_rfq_send(request, pk):
         return redirect('vendor_rfq_detail', pk=pk)
 
     if request.method == 'POST':
-        subject = request.POST.get('subject', '').strip()
+        subject = request.POST.get('subject', '').strip() + f" (RFQ Number: {vrfq.rfq_number})"
         body = request.POST.get('body', '').strip()
         vendor_email = request.POST.get('vendor_email', '').strip()
 

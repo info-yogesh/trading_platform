@@ -1,11 +1,12 @@
-# email_integration/parser.py
 import re
 import json
 import requests
 from django.conf import settings
 
-from trading_platform.settings import OPENROUTER_API_KEY
+from trading_platform.settings import OPENROUTER_API_KEY, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT, AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_VERSION, USE_PAID_MODEL
 
+
+use_paid_model = USE_PAID_MODEL
 
 PARSE_SYSTEM_PROMPT = """You extract RFQ line items from emails.
 Return ONLY valid JSON in this exact shape:
@@ -23,47 +24,120 @@ Return ONLY valid JSON in this exact shape:
 
 
 def parse_email_with_ai(subject, body_text):
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    """
+    Parse new inquiry email.
+    If use_paid_model=True → Azure
+    Else → OpenRouter
+    """
+
+    if use_paid_model:
+        print("AI EMAIL parsing with paid model")
+        # ---- Azure ----
+        url = (
+            f"{AZURE_OPENAI_ENDPOINT}"
+            f"openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions"
+            f"?api-version={AZURE_OPENAI_API_VERSION}"
+        )
+
+        headers = {
             "Content-Type": "application/json",
-        },
-        json={
-            "model": "openrouter/free",
-            "max_tokens": 1500,
+            "api-key": AZURE_OPENAI_API_KEY,
+        }
+
+        payload = {
             "messages": [
                 {"role": "system", "content": PARSE_SYSTEM_PROMPT},
-                {"role": "user", "content": f"Subject: {subject}\n\nBody:\n{body_text[:4000]}"},
+                {
+                    "role": "user",
+                    "content": f"Subject: {subject}\n\nBody:\n{body_text[:4000]}",
+                },
             ],
-        },
-        timeout=30,
-    )
+            "max_tokens": 1500,
+            "temperature": 0,
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+
+    else:
+        print("AI EMAIL parsing without paid model")
+        # ---- OpenRouter ----
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openrouter/free",
+                "max_tokens": 1500,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": PARSE_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Subject: {subject}\n\nBody:\n{body_text[:4000]}",
+                    },
+                ],
+            },
+            timeout=30,
+        )
+
     response.raise_for_status()
     raw = response.json()["choices"][0]["message"]["content"].strip()
 
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
         return json.loads(match.group()) if match else {"lines": []}
 
 
-VENDOR_QUOTE_SYSTEM_PROMPT = """You extract vendor quote data from emails. Be flexible — vendors write prices in many formats.
+VENDOR_QUOTE_SYSTEM_PROMPT = """
+You extract vendor quote data from email replies.
 
-Price formats you must handle:
-- "Price:1000 $"  → unit_price: 1000
-- "$ 1293.26"     → unit_price: 1293.26
-- "USD 2.50"      → unit_price: 2.50
-- "$0.92/pc"      → unit_price: 0.92
-- "1.25 per unit" → unit_price: 1.25
+IMPORTANT:
+- Extract data ONLY from the vendor's reply section.
+- Ignore quoted previous emails (e.g., lines starting with "On Mon,", ">", or prior inquiry text).
+- Ignore signatures and disclaimers unless they contain quote information.
+- Ignore HTML entities like &amp; (treat them as &).
 
-Lead time formats:
-- "2 days", "within 2 days", "2 business days" → lead_time_days: 2
-- "2 weeks" → lead_time_days: 14
-- "immediate" → lead_time_days: 1
+Price formats to handle:
+- "Price:1000 $" → 1000
+- "$ 1293.26"
+- "USD 2.50"
+- "$0.92/pc"
+- "1.25 per piece"
+- "USD 185.00 per piece"
+
+Lead time normalization:
+- "2 days", "2 business days", "within 2 days" → 2
+- "3 business days" → 3
+- "2 weeks" → 14
+- "5 weeks" → 35
+- "immediate" → 1
+
+Quantity formats:
+- "Available Quantity: 120 pcs"
+- "120 pcs available"
+- If not mentioned → 0
+
+Condition rules:
+- Extract main condition keyword only:
+  New, Used, Refurbished, NS, AD
+- If text is "Used (Tested & Fully Functional)" → condition = "Used"
+
+Certification rules:
+- Extract short certification keyword if present:
+  CoC, A+, AAR, AS9120
+- If text says "Certificate of Conformance (CoC)" → certification = "CoC"
+- If only descriptive text exists → return short meaningful keyword
+- If none → empty string
+
+Skip any part where price is missing.
+If vendor says they cannot supply → omit that line entirely.
 
 Return ONLY valid JSON in this exact shape:
+
 {
   "lines": [
     {
@@ -71,83 +145,191 @@ Return ONLY valid JSON in this exact shape:
       "unit_price": 1000.0,
       "qty_available": 0,
       "lead_time_days": 2,
-      "condition": "AD",
-      "certification": "A+",
+      "condition": "New",
+      "certification": "CoC",
       "notes": ""
     }
   ],
-  "vendor_notes": "Any overall notes from the vendor"
+  "vendor_notes": "Any overall notes from vendor"
 }
 
-Rules:
-- pn and unit_price are REQUIRED. Skip lines where price is completely absent.
-- qty_available: use 0 if not mentioned.
-- lead_time_days: integer only. Convert text to days. null if not mentioned.
-- condition: extract exactly as written (New, Used, AD, NS, Refurbished, etc.)
-- certification: extract exactly as written (CoC, A+, AAR, AS9120, etc.)
-- If vendor says they cannot supply a part, omit it entirely.
-- Output ONLY the JSON object. No explanation, no markdown, no code fences."""
+No explanation.
+No markdown.
+Only JSON.
+"""
 
 
 def parse_vendor_quote_email(subject, body_text, rfq_lines=None):
     """
-    Parse a vendor's quote reply email.
-    rfq_lines: list of part numbers we sent — helps AI match lines.
+    Parse vendor quote email.
+    If use_paid_model=True → Azure
+    Else → OpenRouter
     """
+
     context = ""
     if rfq_lines:
         context = "Parts we originally requested:\n" + "\n".join(
             f"  - {pn}" for pn in rfq_lines
         ) + "\n\n"
 
-    response = requests.post(
-        url="https://openrouter.ai/api/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+    user_content = f"{context}Subject: {subject}\n\nEmail:\n{body_text[:4000]}"
+
+    if use_paid_model:
+        # ---- Azure ----
+        url = (
+            f"{AZURE_OPENAI_ENDPOINT}"
+            f"openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions"
+            f"?api-version={AZURE_OPENAI_API_VERSION}"
+        )
+
+        headers = {
             "Content-Type": "application/json",
-        },
-        json={
-            "model": "openrouter/free",
-            "max_tokens": 1500,
+            "api-key": AZURE_OPENAI_API_KEY,
+        }
+
+        payload = {
             "messages": [
                 {"role": "system", "content": VENDOR_QUOTE_SYSTEM_PROMPT},
-                {"role": "user", "content": f"{context}Subject: {subject}\n\nEmail:\n{body_text[:4000]}"},
+                {"role": "user", "content": user_content},
             ],
-        },
-        timeout=30,
-    )
+            "max_tokens": 1500,
+            "temperature": 0,
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+
+    else:
+        # ---- OpenRouter ----
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openrouter/free",
+                "max_tokens": 1500,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": VENDOR_QUOTE_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_content},
+                ],
+            },
+            timeout=30,
+        )
+
     response.raise_for_status()
     raw = response.json()["choices"][0]["message"]["content"].strip()
 
     try:
-        return json.loads(raw)
+        result = json.loads(raw)
+        print(result)
+        return result
     except json.JSONDecodeError:
-        match = re.search(r'\{.*\}', raw, re.DOTALL)
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
         return json.loads(match.group()) if match else {"lines": []}
 
 
-def is_email_relevant(email_log):
+EMAIL_CLASSIFIER_SYSTEM_PROMPT = """You classify trading emails.
+
+Classify the email into ONE of the following types:
+
+- "new_inquiry" → A customer sending a new RFQ / asking for parts / requesting quotation.
+- "vendor_response" → A vendor replying to an RFQ with pricing, availability, lead time, or quotation details.
+
+Rules:
+- If the email contains prices, unit cost, availability, lead time, certifications, or quote references → vendor_response.
+- If the email is requesting quote, sending part numbers with qty, or asking for availability → new_inquiry.
+- Ignore signatures and disclaimers.
+- Be decisive. Choose only one.
+
+Return ONLY valid JSON in this exact format:
+{
+  "email_type": "new_inquiry"
+}
+
+No explanation. No markdown. Only JSON.
+"""
+
+def classify_email(subject, body_text):
     """
-    Quick check if an inbound email looks like a customer RFQ inquiry.
-    Returns (bool, score, reason)
+    Classify email as:
+    - new_inquiry
+    - vendor_response
+
+    If use_paid_model=True → Uses Azure OpenAI
+    If False → Uses OpenRouter
     """
-    subject = (email_log.subject or '').lower()
-    body = (email_log.body_text or '').lower()
-    combined = f"{subject} {body[:500]}"
 
-    # Keywords that suggest an RFQ inquiry
-    rfq_keywords = [
-        'rfq', 'request for quote', 'quotation', 'quote request',
-        'pricing', 'availability', 'part number', 'component',
-        'supply', 'stock', 'lead time', 'inquiry', 'enquiry',
-    ]
+    if use_paid_model:
+        # ---- Azure OpenAI ----
+        url = (
+            f"{AZURE_OPENAI_ENDPOINT}"
+            f"openai/deployments/{AZURE_OPENAI_DEPLOYMENT}/chat/completions"
+            f"?api-version={AZURE_OPENAI_API_VERSION}"
+        )
 
-    score = sum(1 for kw in rfq_keywords if kw in combined)
+        headers = {
+            "Content-Type": "application/json",
+            "api-key": AZURE_OPENAI_API_KEY,
+        }
 
-    if score >= 2:
-        return True, score, 'Matched RFQ keywords'
-    elif score == 1:
-        return True, score, 'Possible RFQ — low confidence'
+        payload = {
+            "messages": [
+                {"role": "system", "content": EMAIL_CLASSIFIER_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": f"Subject: {subject}\n\nEmail:\n{body_text[:4000]}",
+                },
+            ],
+            "max_tokens": 200,
+            "temperature": 0,
+        }
+
+        response = requests.post(url, headers=headers, json=payload, timeout=30)
+
+        response.raise_for_status()
+        raw = response.json()["choices"][0]["message"]["content"].strip()
+
     else:
-        return False, score, 'No RFQ keywords found'
+        # ---- OpenRouter (Free Model) ----
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": "openrouter/free",
+                "max_tokens": 200,
+                "temperature": 0,
+                "messages": [
+                    {"role": "system", "content": EMAIL_CLASSIFIER_SYSTEM_PROMPT},
+                    {
+                        "role": "user",
+                        "content": f"Subject: {subject}\n\nEmail:\n{body_text[:4000]}",
+                    },
+                ],
+            },
+            timeout=30,
+        )
 
+        response.raise_for_status()
+        raw = response.json()["choices"][0]["message"]["content"].strip()
+
+    # ---- Common JSON Parsing Logic ----
+    try:
+        result = json.loads(raw)
+        if result.get("email_type") in ["new_inquiry", "vendor_response"]:
+            return result["email_type"]
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        if match:
+            try:
+                result = json.loads(match.group())
+                return result.get("email_type", "new_inquiry")
+            except Exception:
+                pass
+
+    # Safe fallback (never miss RFQ)
+    return "new_inquiry"

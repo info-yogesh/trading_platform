@@ -11,8 +11,9 @@ from django.views.decorators.http import require_POST
 
 from .models import EmailAccount, EmailLog, ParsedEmailData
 from .gmail_service import fetch_new_emails_for_account
-from .parser import parse_email_with_ai
-from .classifier import classify_email
+from .parser import parse_email_with_ai, parse_vendor_quote_email, classify_email
+from ..rfq.models import RFQLine, RFQ
+from ..vendor_rfq.models import VendorRFQ
 
 logger = logging.getLogger(__name__)
 
@@ -106,9 +107,12 @@ def fetch_account_emails(request, account_id):
     return _run_fetch(EmailAccount.objects.filter(pk=account.pk))
 
 
-def _run_fetch(accounts_qs):
+def _run_fetch(accounts_qs, use_paid_model=False):
     if not accounts_qs.exists():
-        return JsonResponse({'error': 'No active Gmail accounts found.'}, status=400)
+        return JsonResponse(
+            {'error': 'No active Gmail accounts found.'},
+            status=400
+        )
 
     total_fetched = 0
     total_parsed = 0
@@ -123,31 +127,140 @@ def _run_fetch(accounts_qs):
             for log in new_logs:
                 log.status = 'parsing'
                 log.save(update_fields=['status'])
+
                 try:
-                    result = parse_email_with_ai(log.subject, log.body_text)
-                    lines = result.get('lines', [])
-                    ParsedEmailData.objects.update_or_create(
-                        email_log=log,
-                        defaults={
-                            'raw_parsed': result,
-                            'confirmed_lines': lines,
-                        },
+                    subject = log.subject
+                    body = log.body_text
+
+                    # -------------------------
+                    # Step 1: Classify Email
+                    # -------------------------
+                    email_type = classify_email(
+                        subject, body
                     )
-                    # parse_failed if AI returned 0 lines — needs manual entry
-                    log.status = 'parsed' if lines else 'parse_failed'
-                    log.save(update_fields=['status'])
+
+                    result = {"lines": []}
+
+                    # -------------------------
+                    # Step 2: Process by Type
+                    # -------------------------
+
+                    if email_type == "new_inquiry":
+
+                        result = parse_email_with_ai(
+                            subject,
+                            body,
+                        )
+
+                        lines = result.get('lines', [])
+
+                        ParsedEmailData.objects.update_or_create(
+                            email_log=log,
+                            defaults={
+                                'raw_parsed': result,
+                                'confirmed_lines': lines,
+                            },
+                        )
+
+                    else:
+                        # -------------------------
+                        # Vendor Response
+                        # -------------------------
+
+                        rfq_number = None
+
+                        if " (RFQ Number: " in subject:
+                            try:
+                                rfq_number = (
+                                    subject.split(" (RFQ Number: ")[-1]
+                                    .replace(")", "")
+                                    .strip()
+                                )
+                            except Exception:
+                                rfq_number = None
+
+                        if rfq_number:
+                            rfq = VendorRFQ.objects.filter(
+                                rfq_number__icontains=rfq_number
+                            ).first().inquiry
+
+                            if rfq:
+                                rfq_lines_qs = RFQLine.objects.filter(rfq=rfq)
+
+                                rfq_lines = [
+                                    line.part_number_raw or
+                                    (line.part.part_number if line.part else "")
+                                    for line in rfq_lines_qs
+                                ]
+
+                                rfq_lines = [pn for pn in rfq_lines if pn]
+
+                                result = parse_vendor_quote_email(
+                                    subject,
+                                    body,
+                                    rfq_lines=rfq_lines,
+                                )
+
+                                # -------------------------
+                                # Step 3: Save Parsed Data
+                                # -------------------------
+
+                                lines = result.get('lines', [])
+                                normalized_lines = []
+
+                                for l in result.get("lines", []):
+                                    normalized_lines.append({
+                                        "pn": l.get("pn", ""),
+                                        "description": l.get("notes", ""),  # optional mapping
+                                        "qty": l.get("qty_available", ""),  # <-- fix
+                                        "cd": l.get("condition", ""),  # <-- fix
+                                        "unit_price": l.get("unit_price", ""),
+                                        "lead_time": l.get("lead_time_days", ""),  # <-- fix
+                                    })
+
+                                ParsedEmailData.objects.update_or_create(
+                                    email_log=log,
+                                    defaults={
+                                        "raw_parsed": result,
+                                        "confirmed_lines": normalized_lines,
+                                    },
+                                )
+                            else:
+                                errors.append(
+                                    f"RFQ not found: {rfq_number}"
+                                )
+                        else:
+                            errors.append(
+                                f"RFQ number missing in subject: {subject[:50]}"
+                            )
+
+
+
+                    # -------------------------
+                    # Step 4: Update Status
+                    # -------------------------
+
                     if lines:
+                        log.status = 'parsed'
                         total_parsed += 1
                     else:
+                        log.status = 'parse_failed'
                         total_failed += 1
+
+                    log.save(update_fields=['status'])
+
                 except Exception as exc:
+                    print(exc)
                     log.status = 'parse_failed'
                     log.save(update_fields=['status'])
                     total_failed += 1
-                    errors.append(f"Parse error ({log.subject[:30]}): {exc}")
+                    errors.append(
+                        f"Parse error ({(log.subject or '')[:30]}): {str(exc)}"
+                    )
 
         except Exception as exc:
-            errors.append(f"{account.email}: {exc}")
+            print(exc)
+            errors.append(f"{account.email}: {str(exc)}")
 
     return JsonResponse({
         'fetched': total_fetched,
@@ -287,23 +400,108 @@ def retrigger_parse(request, email_log_id):
     Returns JSON { lines: [...], status: 'parsed'|'parse_failed', error? }
     """
     email_log = get_object_or_404(EmailLog, id=email_log_id)
+    errors= []
     try:
-        result = parse_email_with_ai(email_log.subject, email_log.body_text)
-        lines = result.get('lines', [])
-        ParsedEmailData.objects.update_or_create(
-            email_log=email_log,
-            defaults={
-                'raw_parsed': result,
-                'confirmed_lines': lines,
-                'manually_entered': False,
-            },
-        )
-        new_status = 'parsed' if lines else 'parse_failed'
-        email_log.status = new_status
-        email_log.save(update_fields=['status'])
-        return JsonResponse({'lines': lines, 'status': new_status})
+        if email_log.email_type in ["rfq_reply", "vendor_reply"]:
+            subject = email_log.subject
+            body = email_log.body_text
+            rfq_number = None
+
+            if " (RFQ Number: " in subject:
+                try:
+                    rfq_number = (
+                        subject.split(" (RFQ Number: ")[-1]
+                        .replace(")", "")
+                        .strip()
+                    )
+                except Exception:
+                    rfq_number = None
+
+            if rfq_number:
+                rfq = VendorRFQ.objects.filter(
+                    rfq_number__icontains=rfq_number
+                ).first().inquiry
+
+                if rfq:
+                    rfq_lines_qs = RFQLine.objects.filter(rfq=rfq)
+
+                    rfq_lines = [
+                        line.part_number_raw or
+                        (line.part.part_number if line.part else "")
+                        for line in rfq_lines_qs
+                    ]
+
+                    rfq_lines = [pn for pn in rfq_lines if pn]
+
+                    result = parse_vendor_quote_email(
+                        subject,
+                        body,
+                        rfq_lines=rfq_lines,
+                    )
+
+                    lines = result.get('lines', [])
+                    normalized_lines = []
+
+                    for l in result.get("lines", []):
+                        normalized_lines.append({
+                            "pn": l.get("pn", ""),
+                            "description": l.get("notes", ""),  # optional mapping
+                            "qty": l.get("qty_available", ""),  # <-- fix
+                            "cd": l.get("condition", ""),  # <-- fix
+                            "unit_price": l.get("unit_price", ""),
+                            "lead_time": l.get("lead_time_days", ""),  # <-- fix
+                        })
+
+                    ParsedEmailData.objects.update_or_create(
+                        email_log=email_log,
+                        defaults={
+                            "raw_parsed": result,
+                            "confirmed_lines": normalized_lines,
+                        },
+                    )
+                    new_status = 'parsed' if lines else 'parse_failed'
+                    email_log.status = new_status
+                    email_log.save(update_fields=['status'])
+                    response = {'lines': normalized_lines, 'status': new_status}
+                    print(response)
+                    return JsonResponse(response)
+                else:
+                    errors.append(
+                        f"RFQ not found: {rfq_number}"
+                    )
+            else:
+                errors.append(
+                    f"RFQ number missing in subject: {subject[:50]}"
+                )
+
+        else:
+            subject = email_log.subject
+            body = email_log.body_text
+
+            result = parse_email_with_ai(
+                subject,
+                body,
+            )
+
+            lines = result.get('lines', [])
+
+            ParsedEmailData.objects.update_or_create(
+                email_log=email_log,
+                defaults={
+                    'raw_parsed': result,
+                    'confirmed_lines': lines,
+                },
+            )
+            new_status = 'parsed' if lines else 'parse_failed'
+            email_log.status = new_status
+            email_log.save(update_fields=['status'])
+            response = {'lines': lines, 'status': new_status}
+            print(response)
+            return JsonResponse(response)
+
     except Exception as exc:
-        return JsonResponse({'lines': [], 'status': 'parse_failed', 'error': str(exc)}, status=500)
+        print(exc)
+        return JsonResponse({'lines': [], 'status': 'parse_failed', 'error': str(exc), "errors": errors}, status=500)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

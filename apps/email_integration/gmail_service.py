@@ -54,8 +54,7 @@ def _message_to_log(account, msg):
     Convert a raw Gmail API message object to an EmailLog record.
     Captures all RFC 2822 headers needed for thread-reply detection.
     Also calls the classifier immediately after save.
-    """
-    from .classifier import classify_email  # local import to avoid circular
+    """ # local import to avoid circular
 
     headers_list = msg['payload'].get('headers', [])
     headers = {h['name']: h['value'] for h in headers_list}
@@ -89,17 +88,6 @@ def _message_to_log(account, msg):
     except Exception as exc:
         logger.error("Failed to create EmailLog for gmail_id=%s: %s", msg['id'], exc)
         return None
-
-    # ── Classify: new_inquiry vs rfq_reply vs vendor_reply ───────────────────
-    try:
-        classify_email(log)
-        log.save(update_fields=[
-            'email_type', 'linked_inquiry', 'parsed_rfq',
-        ])
-    except Exception as exc:
-        logger.warning("Classification failed for EmailLog %d: %s", log.pk, exc)
-        log.email_type = 'new_inquiry'
-        log.save(update_fields=['email_type'])
 
     return log
 
